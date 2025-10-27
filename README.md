@@ -44,6 +44,7 @@ npm run start:dev
 That's it! 🎉 Your application will be running with:
 - **PostgreSQL** at `localhost:5432`
 - **pgAdmin** at `http://localhost:8080`
+- **Prisma Studio** at `npm run prisma:studio` (database GUI)
 - **API** at `http://localhost:3000`
 
 ## 📁 Project Structure
@@ -81,6 +82,19 @@ backend_arqui/
 - **URL**: `http://localhost:8080`
 - **Email**: `admin@admin.com`
 - **Password**: `admin`
+
+### Prisma Studio
+
+Prisma Studio is a powerful database GUI built into Prisma:
+
+```bash
+npm run prisma:studio
+```
+
+- **Access**: Opens in your browser automatically
+- **Features**: View, edit, and manage your data visually
+- **Real-time**: Changes are reflected immediately
+- **Schema-aware**: Understands your database structure
 
 ## 🐳 Docker Services
 
@@ -159,8 +173,9 @@ npm run test:watch
 1. **Start services**: `./deploy.sh`
 2. **Develop**: `npm run start:dev`
 3. **Database changes**: Update `prisma/schema.prisma` then `npm run prisma:migrate`
-4. **Test**: `npm run test`
-5. **Commit**: `git add . && git commit -m "feat: your feature"`
+4. **View data**: `npm run prisma:studio` (opens database GUI in browser)
+5. **Test**: `npm run test`
+6. **Commit**: `git add . && git commit -m "feat: your feature"`
 
 ## 🚀 Deployment
 
@@ -196,8 +211,8 @@ For production deployment, consider:
 - **ESLint** - Code linting
 - **Prettier** - Code formatting
 - **Jest** - Testing framework
-- **pgAdmin** - PostgreSQL administration tool
-- **Prisma Studio** - Database GUI
+- **pgAdmin** - PostgreSQL administration and query tool
+- **Prisma Studio** - Modern database GUI with visual data management
 
 ### Project Features
 
