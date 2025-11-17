@@ -1,12 +1,8 @@
-// payments/dtos/bank-validate-receipt.dto.ts
-import { IsString, IsNumber } from 'class-validator';
+import { IsNumber } from 'class-validator';
+import { IsTransactionID } from '../../common/validation/decorators/is-transaction-id';
 
 export class BankValidateReceiptRequestDto {
-  @IsString() identificador_transaccion_banco!: string;
-  @IsNumber() monto_reembolso!: number;
+  @IsTransactionID() transactionId!: string;
+  @IsNumber() expectedAmount!: number;
 }
-
-export class BankValidateReceiptResponseDto {
-  @IsString() valido!: 'SI' | 'NO';
-  @IsString() detalle_validacion!: string;
-}
+export class BankValidateReceiptResponseDto { valid!: 'SI'|'NO'; detail!: string; }

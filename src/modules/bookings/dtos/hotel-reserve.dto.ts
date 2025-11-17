@@ -1,18 +1,17 @@
-// bookings/dtos/hotel-reserve.dto.ts
-import { IsString, IsDateString, IsInt, Min } from 'class-validator';
+import { IsUUID, IsDateString } from 'class-validator';
+import { IsClientID } from '../../common/validation/decorators/is-client-id';
 
 export class HotelReserveRequestDto {
-  @IsString() hotel_id!: string;
-  @IsString() tipo_habitacion!: string;
-  @IsDateString() fecha_entrada!: string;
-  @IsDateString() fecha_salida!: string;
-  @IsString() huesped_principal!: string; // datos del huésped principal
+  @IsUUID('4') hotelId!: string;
+  @IsUUID('4') roomId!: string;
+  @IsClientID() clientId!: string;
+  @IsDateString() checkIn!: string;
+  @IsDateString() checkOut!: string;
+  @IsUUID('4') reservationId!: string; // vínculo a la reserva global
 }
 
 export class HotelReserveResponseDto {
-  @IsString() reserva_provisional_id!: string;
-  precio_total!: number;
-  moneda!: string;
-  @IsDateString() fecha_expiracion!: string;
-  estado_inicial!: 'PENDIENTE';
+  hotelReservationId!: string;       // HotelsReservations SoR del Hotel
+  priceTotal!: number; currency!: string;
+  expiresAt!: string; initialState: 'PENDIENTE' = 'PENDIENTE';
 }

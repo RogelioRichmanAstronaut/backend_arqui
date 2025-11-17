@@ -1,13 +1,12 @@
-// bookings/dtos/hotel-confirm.dto.ts
-import { IsString, IsIn } from 'class-validator';
+import { IsUUID } from 'class-validator';
+import { IsTransactionID } from '../../common/validation/decorators/is-transaction-id';
 
 export class HotelConfirmRequestDto {
-  @IsString() reserva_provisional_id!: string;
-  @IsString() transaccion_bancaria_id!: string;
+  @IsUUID('4') hotelReservationId!: string;
+  @IsTransactionID() transactionId!: string;
 }
 
 export class HotelConfirmResponseDto {
-  @IsString() reserva_confirmada_id!: string;
-  @IsIn(['CONFIRMADA', 'RECHAZADA']) estado_final!: 'CONFIRMADA' | 'RECHAZADA';
-  @IsString() codigo_comprobante!: string;
+  confirmedId!: string; finalState!: 'CONFIRMADA' | 'RECHAZADA'; voucherCode!: string;
+  audit?: import('../../common/dtos/audit.dto').AuditDto;
 }

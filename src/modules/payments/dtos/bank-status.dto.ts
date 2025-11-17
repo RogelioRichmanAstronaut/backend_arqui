@@ -1,17 +1,18 @@
-// payments/dtos/bank-status.dto.ts
 import { IsOptional, IsString } from 'class-validator';
+import { IsTransactionID } from '../../common/validation/decorators/is-transaction-id';
+import { StateID } from '../../common/enums/state-id.enum';
 
 export class BankStatusRequestDto {
-  @IsOptional() @IsString() identificador_intento_pago?: string;
-  @IsOptional() @IsString() identificador_transaccion_banco?: string;
+  @IsTransactionID() transactionId!: string;          // obligatorio según política
+  @IsOptional() @IsString() paymentAttemptId?: string;// opcional (compatibilidad)
 }
 
 export class BankStatusResponseDto {
-  @IsString() estado_actual!: string;
-  @IsString() detalle_estado!: string;
-  @IsString() monto_total!: string;
-  @IsString() moneda!: string;
-  @IsString() codigo_autorizacion!: string;
-  @IsString() comprobante_url_o_hash!: string;
-  @IsString() fecha_ultimo_cambio!: string; // ISO-8601
+  state!: StateID;
+  stateDetail!: string;
+  totalAmount!: number;
+  currency!: string;
+  authCode!: string;
+  receiptRef!: string;
+  lastUpdateAt!: string; // ISO 8601
 }

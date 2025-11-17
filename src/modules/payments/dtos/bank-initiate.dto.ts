@@ -1,18 +1,20 @@
-import { IsString, IsNumber, IsUrl, IsIn } from 'class-validator';
+import { IsUUID, IsString, IsUrl, IsNumber } from 'class-validator';
+import { IsClientID } from '../../../common/validation/decorators/is-client-id';
+import { IsISO4217 } from '../../../common/validation/decorators/is-iso4217';
 
 export class BankInitiatePaymentRequestDto {
-  @IsString() identificador_paquete!: string;
-  @IsNumber() monto_total!: number;
-  @IsString() moneda!: string; // ISO-4217
-  @IsString() descripcion!: string;
-  @IsUrl() retorno_url!: string;
-  @IsUrl() callback_url!: string;
-  @IsString() identificador_cliente!: string;
+  @IsUUID('4') reservationId!: string;     // referenciar la orden global
+  @IsClientID() clientId!: string;         // <tipoDoc>-<numero>
+  @IsNumber() totalAmount!: number;
+  @IsISO4217() currency!: string;          // ISO-4217
+  @IsString() description!: string;
+  @IsUrl() returnUrl!: string;
+  @IsUrl() callbackUrl!: string;
 }
 
 export class BankInitiatePaymentResponseDto {
-  @IsString() identificador_intento_pago!: string;
-  @IsUrl() url_pago_banco!: string;
-  @IsIn(['PENDIENTE']) estado_inicial!: 'PENDIENTE';
-  @IsString() fecha_expiracion!: string; // ISO-8601
+  @IsString() paymentAttemptId!: string;   // id interno del banco (no global)
+  @IsUrl() bankPaymentUrl!: string;
+  @IsString() initialState!: 'PENDIENTE';
+  @IsString() expiresAt!: string;          // ISO 8601
 }

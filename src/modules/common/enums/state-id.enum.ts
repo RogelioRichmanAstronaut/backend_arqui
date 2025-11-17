@@ -1,0 +1,1 @@
+export type StateID = 'PENDIENTE' | 'APROBADA' | 'DENEGADA' | 'CANCELADA';

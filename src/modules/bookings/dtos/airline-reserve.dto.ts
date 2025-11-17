@@ -1,17 +1,15 @@
-// bookings/dtos/airline-reserve.dto.ts
-import { IsString, IsInt, Min } from 'class-validator';
+import { IsUUID } from 'class-validator';
+import { IsClientID } from '../../common/validation/decorators/is-client-id';
 
 export class AirlineReserveRequestDto {
-  @IsString() vuelo_id!: string;
-  @IsInt() @Min(1) num_pasajeros!: number;
-  @IsString() contacto_reserva!: string;
-  @IsString() documento_contacto!: string;
+  @IsUUID('4') flightId!: string;
+  @IsUUID('4') reservationId!: string;
+  @IsClientID() clientId!: string;
+  passengers!: Array<{ name: string; doc: string }>;
 }
 
 export class AirlineReserveResponseDto {
-  @IsString() reserva_vuelo_id!: string;
-  precio_total!: number;
-  estado_inicial!: 'PENDIENTE';
-  fecha_expiracion!: string; // ISO-8601
-  observaciones?: string;
+  flightReservationId!: string;
+  priceTotal!: number; initialState: 'PENDIENTE' = 'PENDIENTE';
+  expiresAt!: string;
 }

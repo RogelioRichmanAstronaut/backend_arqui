@@ -1,14 +1,14 @@
-// payments/dtos/bank-refund.dto.ts
-import { IsString, IsNumber } from 'class-validator';
+import { IsNumber } from 'class-validator';
+import { IsTransactionID } from '../../common/validation/decorators/is-transaction-id';
+import type { StateID } from '../../common/enums/state-id.enum';
 
 export class BankRefundRequestDto {
-  @IsString() identificador_transaccion_banco!: string;
-  @IsNumber() monto_reembolso!: number;
+  @IsTransactionID() transactionId!: string;
+  @IsNumber() refundAmount!: number;
 }
-
 export class BankRefundResponseDto {
-  @IsString() identificador_reembolso!: string;
-  @IsString() estado_reembolso!: string;
-  @IsString() comprobante_url_o_hash!: string;
-  @IsString() fecha_reembolso!: string; // ISO-8601
+  refundId!: string; 
+  refundState!: StateID; 
+  receiptRef!: string; 
+  refundedAt!: string;
 }
