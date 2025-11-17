@@ -1,238 +1,166 @@
-#!/bin/bash
+#!/usr/bin/env bash
+set -euo pipefail
 
-# Backend Arqui - Database Deployment Script
-# This script deploys PostgreSQL and pgAdmin containers
+# ========= Config =========
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-set -e
+DB_IMAGE="${DB_IMAGE:-postgres:16-alpine}"
+DB_CONTAINER="${DB_CONTAINER:-turismo-postgres}"
+DB_NAME="${DB_NAME:-turismo_db}"
+DB_USER="${DB_USER:-turismo_user}"
+DB_PASSWORD="${DB_PASSWORD:-turismo_pass}"
+DB_PORT="${DB_PORT:-5432}"
 
-# Colors for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+ENV_FILE="${ROOT_DIR}/.env"
 
-# Function to print colored output
-print_info() {
-    echo -e "${BLUE}ℹ️  $1${NC}"
+# ========= Funciones =========
+port_in_use() {
+  local port="$1"
+  if command -v nc >/dev/null 2>&1; then
+    nc -z localhost "$port" >/dev/null 2>&1
+  else
+    # Fallback si nc no está: intentar conectar con bash/tcp
+    (exec 3<>/dev/tcp/127.0.0.1/"$port") >/dev/null 2>&1 || return 1
+    exec 3>&-
+  fi
 }
 
-print_success() {
-    echo -e "${GREEN}✅ $1${NC}"
-}
-
-print_warning() {
-    echo -e "${YELLOW}⚠️  $1${NC}"
-}
-
-print_error() {
-    echo -e "${RED}❌ $1${NC}"
-}
-
-# Function to check if Docker is running
-check_docker() {
-    if ! docker info >/dev/null 2>&1; then
-        print_error "Docker is not running. Please start Docker and try again."
-        exit 1
+find_free_port() {
+  local try_ports=("$DB_PORT" 5433 5434 5435 5436)
+  for p in "${try_ports[@]}"; do
+    if ! port_in_use "$p"; then
+      echo "$p"
+      return 0
     fi
+  done
+  echo "No hay puertos libres en 5432-5436" >&2
+  exit 1
 }
 
-# Function to check if .env file exists
-check_env() {
-    if [ ! -f ".env" ]; then
-        print_error ".env file not found. Please create it with the required environment variables."
-        exit 1
+docker_must_be_ready() {
+  if ! command -v docker >/dev/null 2>&1; then
+    echo "Docker no está instalado o no está en PATH." >&2
+    exit 1
+  fi
+  if ! docker info >/dev/null 2>&1; then
+    echo "Docker no está disponible (¿está iniciado?)." >&2
+    exit 1
+  fi
+}
+
+ensure_container() {
+  local name="$1"
+  if docker ps -q -f "name=^/${name}$" >/dev/null | grep -q .; then
+    echo "✔ Contenedor ${name} ya está corriendo."
+    return 0
+  fi
+
+  if docker ps -aq -f "name=^/${name}$" >/dev/null | grep -q .; then
+    echo "⚙️  Iniciando contenedor existente ${name}..."
+    docker start "$name" >/dev/null
+  else
+    echo "🚀 Creando contenedor ${name}..."
+    docker run -d \
+      --name "$name" \
+      -e POSTGRES_USER="$DB_USER" \
+      -e POSTGRES_PASSWORD="$DB_PASSWORD" \
+      -e POSTGRES_DB="$DB_NAME" \
+      -p "${DB_PORT}:5432" \
+      -v "${name}-data":/var/lib/postgresql/data \
+      "$DB_IMAGE" >/dev/null
+  fi
+}
+
+wait_for_postgres() {
+  local name="$1"
+  echo -n "⏳ Esperando a Postgres en el contenedor ${name} "
+  # usar pg_isready dentro del contenedor
+  for i in {1..60}; do
+    if docker exec "$name" pg_isready -U "$DB_USER" >/dev/null 2>&1; then
+      echo "→ listo."
+      return 0
     fi
+    echo -n "."
+    sleep 1
+  done
+  echo
+  echo "Postgres no respondió a tiempo." >&2
+  exit 1
 }
 
-# Function to start services
-start_services() {
-    print_info "Starting PostgreSQL and pgAdmin containers..."
-    docker-compose up -d
-    print_success "Containers started successfully!"
-}
-
-# Function to stop services
-stop_services() {
-    print_info "Stopping PostgreSQL and pgAdmin containers..."
-    docker-compose down
-    print_success "Containers stopped successfully!"
-}
-
-# Function to restart services
-restart_services() {
-    print_info "Restarting PostgreSQL and pgAdmin containers..."
-    docker-compose restart
-    print_success "Containers restarted successfully!"
-}
-
-# Function to show status
-show_status() {
-    print_info "Container status:"
-    docker-compose ps
-}
-
-# Function to show logs
-show_logs() {
-    if [ -z "$2" ]; then
-        print_info "Showing logs for all containers (press Ctrl+C to exit):"
-        docker-compose logs -f
+write_env() {
+  local url="$1"
+  if [ -f "$ENV_FILE" ]; then
+    if grep -q '^DATABASE_URL=' "$ENV_FILE"; then
+      echo "✏️  Actualizando DATABASE_URL en .env"
+      # macOS: sed necesita extensión de backup
+      sed -i.bak -E "s#^DATABASE_URL=.*#DATABASE_URL=${url}#g" "$ENV_FILE"
     else
-        print_info "Showing logs for $2 container (press Ctrl+C to exit):"
-        docker-compose logs -f "$2"
+      echo "➕ Agregando DATABASE_URL a .env"
+      printf "\nDATABASE_URL=%s\n" "$url" >> "$ENV_FILE"
     fi
+  else
+    echo "🆕 Creando .env con PORT y DATABASE_URL"
+    cat > "$ENV_FILE" <<EOF
+NODE_ENV=development
+PORT=3000
+DATABASE_URL=${url}
+EOF
+  fi
 }
 
-# Function to reset database (WARNING: This will delete all data)
-reset_database() {
-    print_warning "This will delete all data in the database. Are you sure? (y/N)"
-    read -r response
-    if [[ "$response" =~ ^([yY][eE][sS]|[yY])$ ]]; then
-        print_info "Resetting database..."
-        docker-compose down -v
-        docker-compose up -d postgres
-        print_success "Database reset complete!"
-    else
-        print_info "Database reset cancelled."
-    fi
+print_usage() {
+  cat <<EOF
+Uso:
+  ./deploy.sh                 # Crea/inicia Postgres y escribe .env (DATABASE_URL)
+  ./deploy.sh migrate <name>  # Genera Prisma y aplica migrate dev con nombre <name>
+  ./deploy.sh status          # Muestra estado del contenedor
+  ./deploy.sh down            # Elimina contenedor (no borra volumen)
+Variables opcionales (export antes de ejecutar):
+  DB_IMAGE, DB_CONTAINER, DB_NAME, DB_USER, DB_PASSWORD, DB_PORT
+EOF
 }
 
-# Function to initialize database (run migrations)
-init_database() {
-    print_info "Waiting for PostgreSQL to be ready..."
-    sleep 10
+# ========= Main =========
+CMD="${1:-}"
 
-    # Check if database exists and has tables
-    print_info "Checking database status..."
-    if npm run prisma:generate --silent 2>/dev/null; then
-        # Try to connect and see if migrations table exists
-        if npx prisma db execute --file <(echo "SELECT 1 FROM \"_prisma_migrations\" LIMIT 1;") --schema=prisma/schema.prisma >/dev/null 2>&1; then
-            print_info "Database already initialized, generating Prisma client..."
-            npm run prisma:generate
-            print_success "Database client updated successfully!"
-        else
-            print_info "Database exists but no migrations found, initializing..."
-            init_fresh_database
-        fi
-    else
-        print_info "Database not accessible, initializing from scratch..."
-        init_fresh_database
-    fi
-}
+docker_must_be_ready
 
-# Function to initialize fresh database
-init_fresh_database() {
-    print_info "Creating initial migration..."
-    npx prisma migrate dev --name init --create-only --yes 2>/dev/null || {
-        print_info "Migration already exists, applying it..."
-        npx prisma migrate deploy
-    }
+# Resolver puerto libre
+DB_PORT="$(find_free_port)"
 
-    print_info "Generating Prisma client..."
-    npm run prisma:generate
+# Asegurar contenedor
+ensure_container "$DB_CONTAINER"
 
-    print_success "Database initialized successfully!"
-}
+# Esperar readiness
+wait_for_postgres "$DB_CONTAINER"
 
-# Function to deploy everything automatically
-deploy() {
-    print_info "🚀 Starting Backend Arqui deployment..."
+# Construir DATABASE_URL y escribir/actualizar .env
+DATABASE_URL="postgresql://${DB_USER}:${DB_PASSWORD}@localhost:${DB_PORT}/${DB_NAME}?schema=public"
+write_env "$DATABASE_URL"
 
-    # Start containers if not running
-    if ! docker-compose ps | grep -q "Up"; then
-        print_info "Starting containers..."
-        docker-compose up -d
-        print_success "Containers started!"
-    else
-        print_info "Containers already running"
-    fi
+echo "✅ DATABASE_URL listo:"
+echo "    ${DATABASE_URL}"
+echo "📄 .env ubicado en: ${ENV_FILE}"
 
-    # Initialize database
-    init_database
-
-    print_success "🎉 Backend Arqui deployment completed!"
-    echo ""
-    print_info "Services available:"
-    echo "  📊 PostgreSQL: localhost:5432"
-    echo "  🛠️  pgAdmin: http://localhost:8080"
-    echo "     Email: admin@admin.com"
-    echo "     Password: admin"
-    echo ""
-    print_info "API will be available at: http://localhost:3000"
-}
-
-# Function to show help
-show_help() {
-    echo "Backend Arqui - Database Deployment Script"
-    echo ""
-    echo "Usage: $0 [command]"
-    echo ""
-    echo "Commands:"
-    echo "  deploy      Deploy everything automatically (recommended)"
-    echo "  start       Start PostgreSQL and pgAdmin containers"
-    echo "  stop        Stop PostgreSQL and pgAdmin containers"
-    echo "  restart     Restart PostgreSQL and pgAdmin containers"
-    echo "  status      Show status of containers"
-    echo "  logs        Show logs for all containers"
-    echo "  logs db     Show logs for PostgreSQL container"
-    echo "  logs admin  Show logs for pgAdmin container"
-    echo "  init        Initialize database (run migrations)"
-    echo "  reset       Reset database (WARNING: deletes all data)"
-    echo "  help        Show this help message"
-    echo ""
-    echo "Examples:"
-    echo "  $0 deploy         # Deploy everything automatically"
-    echo "  $0 start          # Start all services"
-    echo "  $0 init           # Initialize database after starting services"
-    echo "  $0 logs db        # View PostgreSQL logs"
-    echo ""
-    echo "Services:"
-    echo "  - PostgreSQL: localhost:5432"
-    echo "  - pgAdmin: http://localhost:8080"
-    echo "    Email: admin@admin.com"
-    echo "    Password: admin"
-}
-
-# Main script logic
-main() {
-    check_docker
-    check_env
-
-    case "${1:-deploy}" in
-        deploy)
-            deploy
-            ;;
-        start)
-            start_services
-            ;;
-        stop)
-            stop_services
-            ;;
-        restart)
-            restart_services
-            ;;
-        status)
-            show_status
-            ;;
-        logs)
-            show_logs "$@"
-            ;;
-        init)
-            init_database
-            ;;
-        reset)
-            reset_database
-            ;;
-        help|--help|-h)
-            show_help
-            ;;
-        *)
-            print_error "Unknown command: $1"
-            echo ""
-            show_help
-            exit 1
-            ;;
-    esac
-}
-
-main "$@"
+case "$CMD" in
+  migrate)
+    NAME="${2:-init}"
+    echo "🧭 Prisma generate..."
+    npx prisma generate
+    echo "🧭 Prisma migrate dev -n \"${NAME}\"..."
+    npx prisma migrate dev -n "${NAME}"
+    ;;
+  status)
+    docker ps -a --filter "name=^/${DB_CONTAINER}$"
+    ;;
+  down)
+    echo "🗑️  Eliminando contenedor ${DB_CONTAINER} (volumen permanece)..."
+    docker rm -f "${DB_CONTAINER}" || true
+    ;;
+  "")
+    ;;
+  *)
+    print_usage
+    ;;
+esac

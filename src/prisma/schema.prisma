@@ -1,0 +1,39 @@
+enum ReservationState {
+  PENDIENTE
+  APROBADA
+  DENEGADA
+  CANCELADA
+}
+
+model Client {
+  id         String   @id @default(uuid())
+  // ClientID normalizado: <TIPO>-<NUMERO> (p.ej., CC-1032456789)
+  clientId   String   @unique
+  name       String
+  email      String?
+  phone      String?
+  isDeleted  Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  reservations Reservation[]
+}
+
+model Reservation {
+  id            String           @id @default(uuid())
+  // business id expuesto públicamente
+  reservationId String           @unique
+  clientId      String
+  client        Client           @relation(fields: [clientId], references: [id])
+  state         ReservationState @default(PENDIENTE)
+  currency      String           // ISO-4217 validado en capa app
+  totalAmount   Decimal          @db.Decimal(12, 2)
+  note          String?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}

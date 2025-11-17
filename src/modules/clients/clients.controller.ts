@@ -1,0 +1,29 @@
+import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common';
+import { ClientsService } from './clients.service';
+import { CreateClientDto } from './dtos/create-client.dto';
+import { UpdateClientDto } from './dtos/update-client.dto';
+
+@Controller('clients')
+export class ClientsController {
+  constructor(private readonly service: ClientsService) {}
+
+  @Post()
+  create(@Body() dto: CreateClientDto) {
+    return this.service.create(dto);
+  }
+
+  @Get(':id')
+  get(@Param('id') id: string) {
+    return this.service.findById(id);
+  }
+
+  @Patch(':id')
+  update(@Param('id') id: string, @Body() dto: UpdateClientDto) {
+    return this.service.update(id, dto);
+  }
+
+  @Delete(':id')
+  remove(@Param('id') id: string) {
+    return this.service.softDelete(id);
+  }
+}
