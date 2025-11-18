@@ -12,6 +12,13 @@ enum PaymentState {
   CANCELADA
 }
 
+enum BookingState {
+  PENDIENTE
+  APROBADA
+  DENEGADA
+  CANCELADA
+}
+
 model Client {
   id         String   @id @default(uuid())
   // ClientID normalizado: <TIPO>-<NUMERO> (p.ej., CC-1032456789)
@@ -93,6 +100,66 @@ model Outbox {
   payload       Json
   createdAt     DateTime @default(now())
   publishedAt   DateTime?
+}
+
+model HotelSupplier {
+  id       String  @id @default(uuid())
+  code     String  @unique
+  name     String
+  baseUrl  String
+  createdAt DateTime @default(now())
+}
+
+model AirlineSupplier {
+  id       String  @id @default(uuid())
+  code     String  @unique
+  name     String
+  baseUrl  String
+  createdAt DateTime @default(now())
+}
+
+model HotelBooking {
+  id             String       @id @default(uuid())
+  bookingId      String       @unique          // business id interno del dominio
+  reservationId  String?
+  reservation    Reservation? @relation(fields: [reservationId], references: [id])
+  clientId       String
+  supplierId     String
+  supplier       HotelSupplier @relation(fields: [supplierId], references: [id])
+  propertyCode   String
+  roomTypeCode   String
+  ratePlanCode   String
+  checkIn        DateTime
+  checkOut       DateTime
+  currency       String
+  totalAmount    Decimal       @db.Decimal(12, 2)
+  state          BookingState  @default(PENDIENTE)
+  extBookingId   String?
+  idempotencyKey String?       @unique
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+}
+
+model FlightBooking {
+  id             String       @id @default(uuid())
+  pnr            String       @unique          // business id (PNR)
+  reservationId  String?
+  reservation    Reservation? @relation(fields: [reservationId], references: [id])
+  clientId       String
+  supplierId     String
+  supplier       AirlineSupplier @relation(fields: [supplierId], references: [id])
+  origin         String        // IATA
+  destination    String        // IATA
+  departureAt    DateTime
+  returnAt       DateTime?
+  currency       String
+  totalAmount    Decimal       @db.Decimal(12, 2)
+  state          BookingState  @default(PENDIENTE)
+  extBookingId   String?
+  segments       Json?
+  idempotencyKey String?       @unique
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
 }
 
 datasource db {
