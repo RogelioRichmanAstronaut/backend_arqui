@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Headers, Post, Query, Req } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { PaymentsService } from './payments.service';
 import {
   BankInitiatePaymentRequestDto,
@@ -20,12 +20,14 @@ import {
   BankValidateReceiptRequestDto,
   BankValidateReceiptResponseDto,
 } from './dtos/bank-validate-receipt.dto';
+import { JwtAuthGuard } from '../auth/guards/jwt.guard';
 
 @Controller('payments')
 export class PaymentsController {
   constructor(private readonly service: PaymentsService) {}
 
   @Post('init')
+  @UseGuards(JwtAuthGuard)
   async initiate(
     @Body() dto: BankInitiatePaymentRequestDto,
     @Headers('Idempotency-Key') idemKey?: string,
@@ -44,16 +46,19 @@ export class PaymentsController {
   }
 
   @Get('status')
+  @UseGuards(JwtAuthGuard)
   async status(@Query() q: BankStatusRequestDto): Promise<BankStatusResponseDto> {
     return this.service.status(q);
   }
 
   @Post('refund')
+  @UseGuards(JwtAuthGuard)
   async refund(@Body() dto: BankRefundRequestDto): Promise<BankRefundResponseDto> {
     return this.service.refund(dto);
   }
 
   @Post('receipt/validate')
+  @UseGuards(JwtAuthGuard)
   async validateReceipt(
     @Body() dto: BankValidateReceiptRequestDto,
   ): Promise<BankValidateReceiptResponseDto> {

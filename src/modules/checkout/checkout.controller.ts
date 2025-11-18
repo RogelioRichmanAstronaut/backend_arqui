@@ -1,9 +1,11 @@
-import { Body, Controller, Headers, Post } from '@nestjs/common';
+import { Body, Controller, Headers, Post, UseGuards } from '@nestjs/common';
 import { CheckoutService } from './checkout.service';
 import { CheckoutQuoteRequestDto, CheckoutQuoteResponseDto } from './dtos/checkout-quote.dto';
 import { CheckoutConfirmRequestDto, CheckoutConfirmResponseDto } from './dtos/checkout-confirm.dto';
+import { JwtAuthGuard } from '../auth/guards/jwt.guard';
 
 @Controller('checkout')
+@UseGuards(JwtAuthGuard)
 export class CheckoutController {
   constructor(private readonly service: CheckoutService) {}
 

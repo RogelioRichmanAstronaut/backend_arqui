@@ -5,6 +5,7 @@ import { CheckoutConfirmRequestDto, CheckoutConfirmResponseDto } from './dtos/ch
 
 import { BookingsService } from '../bookings/bookings.service';
 import { PaymentsService } from '../payments/payments.service';
+import { MarginsService } from '../margins/margins.service';
 
 // DTOs de bookings (Paso 3)
 import { HotelReserveRequestDto } from '../bookings/dtos/hotel-reserve.dto';
@@ -13,12 +14,16 @@ import { AirlineReserveRequestDto } from '../bookings/dtos/airline-reserve.dto';
 // DTOs de pagos (Paso 2)
 import { BankInitiatePaymentRequestDto } from '../payments/dtos/bank-initiate.dto';
 
+// Tipos Prisma
+import { Prisma, CartItemKind } from '@prisma/client';
+
 @Injectable()
 export class CheckoutService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly bookings: BookingsService,
     private readonly payments: PaymentsService,
+    private readonly margins: MarginsService,
   ) {}
 
   async quote(dto: CheckoutQuoteRequestDto): Promise<CheckoutQuoteResponseDto> {
@@ -29,18 +34,35 @@ export class CheckoutService {
     if (!cart || cart.items.length === 0) {
       return { currency: 'COP', total: 0, items: [] };
     }
-    const total = cart.items.reduce((s: number, it: { price: number; quantity: number }): number => s + Number(it.price) * it.quantity, 0);
-    return {
-      currency: cart.currency,
-      total,
-      items: cart.items.map((it: any) => ({
+
+    // Aplicar márgenes a cada item
+    const itemsWithMargin = cart.items.map((it) => {
+      const basePrice = Number(it.price);
+      const marginCalc = this.margins.applyMargin(basePrice, it.kind as CartItemKind);
+      
+      return {
         kind: it.kind,
         refId: it.refId,
-        price: Number(it.price),
+        price: marginCalc.final, // Precio final con margen
         currency: it.currency,
         quantity: it.quantity,
-        metadata: it.metadata ?? {},
-      })),
+        metadata: {
+          ...(typeof it.metadata === 'object' && it.metadata !== null ? it.metadata as Record<string, unknown> : {}),
+          pricing: {
+            basePrice: marginCalc.base,
+            margin: marginCalc.margin,
+            finalPrice: marginCalc.final,
+          },
+        },
+      };
+    });
+
+    const total = itemsWithMargin.reduce((s, it) => s + it.price * it.quantity, 0);
+
+    return {
+      currency: cart.currency,
+      total: Number(total.toFixed(2)),
+      items: itemsWithMargin,
     };
   }
 
@@ -52,7 +74,7 @@ export class CheckoutService {
     if (cart.currency.toUpperCase() !== dto.currency.toUpperCase()) {
       throw new BadRequestException('La moneda del carrito no coincide con la solicitada');
     }
-    const total = cart.items.reduce((s: number, it: { price: number; quantity: number }) => s + Number(it.price) * it.quantity, 0);
+    const total = cart.items.reduce((s, it) => s + Number(it.price) * it.quantity, 0);
 
     // 2) Idempotencia (Order)
     if (idemKey) {
@@ -83,6 +105,7 @@ export class CheckoutService {
     // 3) Crear Reservation + Order
     const reservation = await this.prisma.reservation.create({
       data: {
+        reservationId: `RSV-${Date.now()}`,
         clientId: dto.clientId,
         currency: dto.currency.toUpperCase(),
         totalAmount: total,
@@ -99,25 +122,17 @@ export class CheckoutService {
         reservationId: reservation.id,
         idempotencyKey: idemKey ?? null,
         items: {
-          create: cart.items.map((it: CartItem) => ({
-            kind: it.kind,
+          create: cart.items.map((it) => ({
+            kind: it.kind as CartItemKind,
             refId: it.refId,
-            price: it.price,
+            price: Number(it.price),
             currency: it.currency,
-            metadata: it.metadata as Record<string, any>,
+            metadata: it.metadata ?? {},
           })),
         },
       },
       include: { items: true },
     });
-
-interface CartItem {
-  kind: string;
-  refId: string;
-  price: number;
-  currency: string;
-  metadata: Record<string, any> | null;
-}
 
     // 4) Reservas proveedor (no confirmamos todavía)
     const hotelReservations: Array<{ hotelReservationId: string; expiresAt: string }> = [];
@@ -125,7 +140,7 @@ interface CartItem {
 
     try {
       // HOTEL
-    for (const it of order.items.filter((i: { kind: string }) => i.kind === 'HOTEL')) {
+    for (const it of order.items.filter((i) => i.kind === CartItemKind.HOTEL)) {
       const m = it.metadata as {
         hotelId: string;
         roomId: string;
@@ -145,7 +160,7 @@ interface CartItem {
     }
 
       // AIR
-    for (const it of order.items.filter((i: { kind: string }) => i.kind === 'AIR')) {
+    for (const it of order.items.filter((i) => i.kind === CartItemKind.AIR)) {
       const m = it.metadata as {
         flightId: string;
         passengers: Array<{ name: string; age: number; seat: string }>;

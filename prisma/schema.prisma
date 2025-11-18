@@ -1,6 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -10,10 +7,239 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  name      String?
+enum ReservationState {
+  PENDIENTE
+  APROBADA
+  DENEGADA
+  CANCELADA
+}
+
+enum PaymentState {
+  PENDIENTE
+  APROBADA
+  DENEGADA
+  CANCELADA
+}
+
+enum BookingState {
+  PENDIENTE
+  APROBADA
+  DENEGADA
+  CANCELADA
+}
+
+enum CartItemKind {
+  HOTEL
+  AIR
+}
+
+enum OrderState {
+  PENDING_PAYMENT
+  FAILED
+  PAID
+  CANCELLED
+}
+
+model Client {
+  id         String   @id @default(uuid())
+  // ClientID normalizado: <TIPO>-<NUMERO> (p.ej., CC-1032456789)
+  clientId   String   @unique
+  name       String
+  email      String?
+  phone      String?
+  isDeleted  Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  reservations Reservation[]
+}
+
+model Reservation {
+  id            String           @id @default(uuid())
+  // business id expuesto públicamente
+  reservationId String           @unique
+  clientId      String
+  client        Client           @relation(fields: [clientId], references: [id])
+  state         ReservationState @default(PENDIENTE)
+  currency      String           // ISO-4217 validado en capa app
+  totalAmount   Decimal          @db.Decimal(12, 2)
+  note          String?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  paymentAttempts PaymentAttempt[]
+  hotelBookings   HotelBooking[]
+  flightBookings  FlightBooking[]
+  orders          Order[]
+}
+
+model PaymentAttempt {
+  id                 String       @id @default(uuid())
+  reservationId      String
+  reservation        Reservation  @relation(fields: [reservationId], references: [id])
+  paymentAttemptExtId String?     @unique
+  idempotencyKey     String?      @unique
+  state              PaymentState  @default(PENDIENTE)
+  totalAmount        Decimal       @db.Decimal(12, 2)
+  currency           String
+  returnUrl          String
+  callbackUrl        String
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  transactions Transaction[]
+}
+
+model Transaction {
+  id               String       @id @default(uuid())
+  transactionId    String       @unique
+  paymentAttemptId String
+  paymentAttempt   PaymentAttempt @relation(fields: [paymentAttemptId], references: [id])
+  state            PaymentState
+  authCode         String?
+  receiptRef       String?
+  totalAmount      Decimal       @db.Decimal(12, 2)
+  currency         String
+  transactionAt    DateTime
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  refunds Refund[]
+}
+
+model Refund {
+  id            String     @id @default(uuid())
+  refundId      String     @unique
+  transactionId String
+  transaction   Transaction @relation(fields: [transactionId], references: [id])
+  amount        Decimal     @db.Decimal(12, 2)
+  state         PaymentState
+  refundedAt    DateTime
+  createdAt     DateTime    @default(now())
+}
+
+model Outbox {
+  id            String   @id @default(uuid())
+  aggregateType String
+  aggregateId   String
+  type          String
+  payload       Json
+  createdAt     DateTime @default(now())
+  publishedAt   DateTime?
+}
+
+model HotelSupplier {
+  id       String  @id @default(uuid())
+  code     String  @unique
+  name     String
+  baseUrl  String
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+
+  bookings HotelBooking[]
+}
+
+model AirlineSupplier {
+  id       String  @id @default(uuid())
+  code     String  @unique
+  name     String
+  baseUrl  String
+  createdAt DateTime @default(now())
+
+  bookings FlightBooking[]
+}
+
+model HotelBooking {
+  id             String       @id @default(uuid())
+  bookingId      String       @unique          // business id interno del dominio
+  reservationId  String?
+  reservation    Reservation? @relation(fields: [reservationId], references: [id])
+  clientId       String
+  supplierId     String
+  supplier       HotelSupplier @relation(fields: [supplierId], references: [id])
+  propertyCode   String
+  roomTypeCode   String
+  ratePlanCode   String
+  checkIn        DateTime
+  checkOut       DateTime
+  currency       String
+  totalAmount    Decimal       @db.Decimal(12, 2)
+  state          BookingState  @default(PENDIENTE)
+  extBookingId   String?
+  idempotencyKey String?       @unique
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+}
+
+model FlightBooking {
+  id             String       @id @default(uuid())
+  pnr            String       @unique          // business id (PNR)
+  reservationId  String?
+  reservation    Reservation? @relation(fields: [reservationId], references: [id])
+  clientId       String
+  supplierId     String
+  supplier       AirlineSupplier @relation(fields: [supplierId], references: [id])
+  origin         String        // IATA
+  destination    String        // IATA
+  departureAt    DateTime
+  returnAt       DateTime?
+  currency       String
+  totalAmount    Decimal       @db.Decimal(12, 2)
+  state          BookingState  @default(PENDIENTE)
+  extBookingId   String?
+  segments       Json?
+  idempotencyKey String?       @unique
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+}
+
+model Cart {
+  id         String      @id @default(uuid())
+  clientId   String
+  currency   String
+  items      CartItem[]
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+
+  @@index([clientId])
+}
+
+model CartItem {
+  id         String       @id @default(uuid())
+  cartId     String
+  cart       Cart         @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  kind       CartItemKind
+  refId      String                   // hotelRoomId / flightId
+  quantity   Int           @default(1)
+  price      Decimal       @db.Decimal(12,2)
+  currency   String
+  metadata   Json
+  createdAt  DateTime      @default(now())
+
+  @@index([cartId])
+}
+
+model Order {
+  id              String      @id @default(uuid())
+  orderNumber     String      @unique
+  clientId        String
+  currency        String
+  totalAmount     Decimal     @db.Decimal(12,2)
+  state           OrderState  @default(PENDING_PAYMENT)
+  reservationId   String
+  reservation     Reservation @relation(fields: [reservationId], references: [id])
+  idempotencyKey  String?     @unique
+  items           OrderItem[]
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+}
+
+model OrderItem {
+  id        String   @id @default(uuid())
+  orderId   String
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  kind      CartItemKind
+  refId     String
+  price     Decimal  @db.Decimal(12,2)
+  currency  String
+  metadata  Json
 }

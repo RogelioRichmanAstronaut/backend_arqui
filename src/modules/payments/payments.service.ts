@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { BankHttpAdapter } from './adapters/bank-http.adapter';
+import { PaymentState, ReservationState } from '@prisma/client';
 import { BankSignatureService } from './services/bank-signature.service';
 import { bankConfig } from './bank.config';
 import { OutboxPublisher } from './outbox/outbox.publisher';
@@ -170,29 +171,16 @@ export class PaymentsService {
     });
 
     // 4) Actualizar estados + publicar eventos
-    await this.prisma.$transaction(async (db: {
-      paymentAttempt: {
-        update: (args: {
-          where: { id: string };
-          data: { state: string };
-        }) => Promise<void>;
-      };
-      reservation: {
-        update: (args: {
-          where: { id: string };
-          data: { state: string };
-        }) => Promise<void>;
-      };
-    }) => {
+    await this.prisma.$transaction(async (db) => {
       await db.paymentAttempt.update({
         where: { id: attempt.id },
-        data: { state: newState as any },
+        data: { state: newState as PaymentState },
       });
 
       if (newState === 'APROBADA') {
         await db.reservation.update({
           where: { id: attempt.reservationId },
-          data: { state: 'APROBADA' },
+          data: { state: ReservationState.APROBADA },
         });
         await this.outbox.publish({
           aggregateType: 'Payment',

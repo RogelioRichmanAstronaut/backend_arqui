@@ -1,4 +1,4 @@
-import { Body, Controller, Post } from '@nestjs/common';
+import { Body, Controller, Post, UseGuards } from '@nestjs/common';
 import { BookingsService } from './bookings.service';
 
 // AIRLINE DTOs
@@ -12,8 +12,10 @@ import { HotelSearchRequestDto, HotelSearchResponseDto } from './dtos/hotel-sear
 import { HotelReserveRequestDto, HotelReserveResponseDto } from './dtos/hotel-reserve.dto';
 import { HotelConfirmRequestDto, HotelConfirmResponseDto } from './dtos/hotel-confirm.dto';
 import { HotelCancelRequestDto, HotelCancelResponseDto } from './dtos/hotel-cancel.dto';
+import { JwtAuthGuard } from '../auth/guards/jwt.guard';
 
 @Controller('bookings')
+@UseGuards(JwtAuthGuard)
 export class BookingsController {
   constructor(private readonly service: BookingsService) {}
 
