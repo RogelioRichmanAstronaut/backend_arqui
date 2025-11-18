@@ -8,6 +8,7 @@ import { ClientsModule } from './modules/clients/clients.module';
 import { ReservationsModule } from './modules/reservations/reservations.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { HealthModule } from './modules/observability/health.module';
+import { PaymentsModule } from './modules/payments/payments.module';
 
 @Module({
   imports: [
@@ -19,7 +20,8 @@ import { HealthModule } from './modules/observability/health.module';
     HealthModule,
     PrismaModule,
     ClientsModule,
-    ReservationsModule
+    ReservationsModule,
+    PaymentsModule
   ],
   controllers: [AppController],
   providers: [AppService],

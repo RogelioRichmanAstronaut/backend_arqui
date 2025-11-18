@@ -5,6 +5,13 @@ enum ReservationState {
   CANCELADA
 }
 
+enum PaymentState {
+  PENDIENTE
+  APROBADA
+  DENEGADA
+  CANCELADA
+}
+
 model Client {
   id         String   @id @default(uuid())
   // ClientID normalizado: <TIPO>-<NUMERO> (p.ej., CC-1032456789)
@@ -31,6 +38,61 @@ model Reservation {
   note          String?
   createdAt     DateTime         @default(now())
   updatedAt     DateTime         @updatedAt
+}
+
+model PaymentAttempt {
+  id                 String       @id @default(uuid())
+  reservationId      String
+  reservation        Reservation  @relation(fields: [reservationId], references: [id])
+  paymentAttemptExtId String?     @unique
+  idempotencyKey     String?      @unique
+  state              PaymentState  @default(PENDIENTE)
+  totalAmount        Decimal       @db.Decimal(12, 2)
+  currency           String
+  returnUrl          String
+  callbackUrl        String
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  transactions Transaction[]
+}
+
+model Transaction {
+  id               String       @id @default(uuid())
+  transactionId    String       @unique
+  paymentAttemptId String
+  paymentAttempt   PaymentAttempt @relation(fields: [paymentAttemptId], references: [id])
+  state            PaymentState
+  authCode         String?
+  receiptRef       String?
+  totalAmount      Decimal       @db.Decimal(12, 2)
+  currency         String
+  transactionAt    DateTime
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  refunds Refund[]
+}
+
+model Refund {
+  id            String     @id @default(uuid())
+  refundId      String     @unique
+  transactionId String
+  transaction   Transaction @relation(fields: [transactionId], references: [id])
+  amount        Decimal     @db.Decimal(12, 2)
+  state         PaymentState
+  refundedAt    DateTime
+  createdAt     DateTime    @default(now())
+}
+
+model Outbox {
+  id            String   @id @default(uuid())
+  aggregateType String
+  aggregateId   String
+  type          String
+  payload       Json
+  createdAt     DateTime @default(now())
+  publishedAt   DateTime?
 }
 
 datasource db {

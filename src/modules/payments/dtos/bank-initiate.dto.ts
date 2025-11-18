@@ -1,6 +1,6 @@
 import { IsUUID, IsString, IsUrl, IsNumber } from 'class-validator';
-import { IsClientID } from '../../../common/validation/decorators/is-client-id';
-import { IsISO4217 } from '../../../common/validation/decorators/is-iso4217';
+import { IsClientID } from '../../common/validation/decorators/is-client-id';
+import { IsISO4217 } from '../../common/validation/decorators/is-iso4217';
 
 export class BankInitiatePaymentRequestDto {
   @IsUUID('4') reservationId!: string;     // referenciar la orden global
