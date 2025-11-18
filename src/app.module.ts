@@ -9,6 +9,9 @@ import { ReservationsModule } from './modules/reservations/reservations.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { HealthModule } from './modules/observability/health.module';
 import { PaymentsModule } from './modules/payments/payments.module';
+import { BookingsModule } from './modules/bookings/bookings.module';
+import { CheckoutModule } from './modules/checkout/checkout.module';
+import { CartModule } from './modules/cart/cart.module';
 
 @Module({
   imports: [
@@ -21,7 +24,10 @@ import { PaymentsModule } from './modules/payments/payments.module';
     PrismaModule,
     ClientsModule,
     ReservationsModule,
-    PaymentsModule
+    PaymentsModule,
+    BookingsModule,
+    CheckoutModule,
+    CartModule
   ],
   controllers: [AppController],
   providers: [AppService],
