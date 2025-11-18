@@ -243,3 +243,19 @@ model OrderItem {
   currency  String
   metadata  Json
 }
+
+enum UserRole {
+  ADMIN
+  EMPLOYEE
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  role         UserRole @default(EMPLOYEE)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}

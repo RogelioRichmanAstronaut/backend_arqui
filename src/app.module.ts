@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { ScheduleModule } from '@nestjs/schedule';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { PrismaModule } from './prisma/prisma.module';
@@ -16,9 +17,11 @@ import { BookingsModule } from './modules/bookings/bookings.module';
 import { CheckoutModule } from './modules/checkout/checkout.module';
 import { CartModule } from './modules/cart/cart.module';
 import { ReportingModule } from './modules/reporting/reporting.module';
+import { OutboxProcessor } from './modules/common/workers/outbox.processor';
 
 @Module({
   imports: [
+    ScheduleModule.forRoot(),
     ConfigModule.forRoot({ 
       isGlobal: true,
       validate: validateEnv,
@@ -41,6 +44,6 @@ import { ReportingModule } from './modules/reporting/reporting.module';
     ReportingModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [AppService, OutboxProcessor],
 })
 export class AppModule {}
