@@ -8,6 +8,8 @@ export class CatalogService {
     new CityEntity('CO-BOG', 'Bogotá', 'Colombia'),
     new CityEntity('CO-MDE', 'Medellín', 'Colombia'),
     new CityEntity('CO-CTG', 'Cartagena', 'Colombia'),
+    new CityEntity('FR-PAR', 'París', 'Francia'),
+    new CityEntity('JP-TYO', 'Tokio', 'Japón'),
     new CityEntity('CO-CLO', 'Cali', 'Colombia'),
     new CityEntity('US-MIA', 'Miami', 'USA'),
     new CityEntity('US-NYC', 'New York', 'USA'),
