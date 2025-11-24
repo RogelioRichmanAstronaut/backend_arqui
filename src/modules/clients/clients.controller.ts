@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards, Request } from '@nestjs/common';
 import { ClientsService } from './clients.service';
 import { CreateClientDto } from './dtos/create-client.dto';
 import { UpdateClientDto } from './dtos/update-client.dto';
@@ -12,6 +12,11 @@ export class ClientsController {
   @Post()
   create(@Body() dto: CreateClientDto) {
     return this.service.create(dto);
+  }
+
+  @Get('me')
+  getMyProfile(@Request() req: any) {
+    return this.service.findByEmail(req.user.email);
   }
 
   @Get(':id')

@@ -30,6 +30,14 @@ export class ClientsService {
     return client;
   }
 
+  async findByEmail(email: string) {
+    const client = await this.prisma.client.findFirst({ 
+      where: { email, isDeleted: false } 
+    });
+    if (!client) throw new NotFoundException('Cliente no encontrado');
+    return client;
+  }
+
   async update(id: string, dto: UpdateClientDto) {
     await this.ensureExists(id);
     return this.prisma.client.update({
