@@ -35,10 +35,10 @@ export class BankHttpAdapter implements BankPort {
 
     const { data } = await this.http.post('/crear-pago', body, { headers });
     return {
-      paymentAttemptExtId: data?.id_pago,
-      bankPaymentUrl: data?.url_pago,
+      paymentAttemptExtId: data?.referencia_transaccion,
+      bankPaymentUrl: data?.url_banco,
       initialState: 'PENDIENTE',
-      expiresAt: data?.fecha_expiracion,
+      expiresAt: data?.fecha_expiracion || new Date(Date.now() + 15 * 60 * 1000).toISOString(),
     };
   }
 

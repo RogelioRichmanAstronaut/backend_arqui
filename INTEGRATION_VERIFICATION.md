@@ -3,6 +3,8 @@
 ## ✅ 1. Servicio Banco (`bank-http.adapter.ts`)
 
 ### Iniciar Pago (POST `/crear-pago`)
+
+**Request:**
 ```json
 {
   "monto_total": number,
@@ -14,7 +16,17 @@
   "destinatario": "Agencia de Viajes"
 }
 ```
-**Estado:** ✅ CORRECTO - Todos los campos coinciden con el PDF
+
+**Response (lectura):**
+```json
+{
+  "referencia_transaccion": string,  // ✅ No "id_pago"
+  "url_banco": string,               // ✅ No "url_pago"
+  "fecha_expiracion": string
+}
+```
+
+**Estado:** ✅ CORRECTO - Request y Response coinciden con el PDF
 
 ### Consultar Estado (GET `/pagos/estado`)
 ```
@@ -97,6 +109,8 @@ Params:
 ## ✅ 3. Servicio Aerolínea (`airline-http.adapter.ts`)
 
 ### Búsqueda (POST `/aerolinea/buscarVuelos`)
+
+**Request:**
 ```json
 {
   "origen": string,
@@ -107,9 +121,35 @@ Params:
   "clase": string
 }
 ```
-**Estado:** ✅ CORRECTO - camelCase según PDF
+
+**Response (lectura):**
+```json
+{
+  "consulta_id": string,           // ✅ No "consultaId"
+  "vuelos": [
+    {
+      "Flight_id": string,         // ✅ No "vueloId" (Mayúscula!)
+      "aerolinea": string,
+      "origen": string,
+      "destino": string,
+      "fecha_salida": string,      // ✅ No "fechaSalida"
+      "fecha_llegada": string,     // ✅ No "fechaLlegada"
+      "duracion": string,
+      "tarifa": string,
+      "reglas": array,
+      "precio": number,
+      "moneda": string,
+      "equipaje": string
+    }
+  ]
+}
+```
+
+**Estado:** ✅ CORRECTO - Request (camelCase) y Response (snake_case) según PDF
 
 ### Reserva (POST `/aerolinea/reservarVuelo`)
+
+**Request:**
 ```json
 {
   "vueloId": string,
@@ -118,9 +158,21 @@ Params:
   "documentoContacto": string
 }
 ```
-**Estado:** ✅ CORRECTO - Incluye contacto obligatorio
+
+**Response (lectura):**
+```json
+{
+  "reserva_vuelo_id": string,     // ✅ No "reservaVueloId"
+  "precio_total": number,         // ✅ No "precioTotal"
+  "fecha_expiracion": string      // ✅ No "fechaExpiracion"
+}
+```
+
+**Estado:** ✅ CORRECTO
 
 ### Confirmación (POST `/aerolinea/confirmarReserva`)
+
+**Request:**
 ```json
 {
   "reservaVueloId": string,
@@ -129,9 +181,21 @@ Params:
   "estado": "CONFIRMADO"
 }
 ```
-**Estado:** ✅ CORRECTO - Incluye precio y estado
+
+**Response (lectura):**
+```json
+{
+  "confirmacion_id": string,      // ✅ No "confirmacionId"
+  "estado_final": string,         // ✅ No "estadoFinal"
+  "codigo_tiquete": string        // ✅ No "codigoTiquete"
+}
+```
+
+**Estado:** ✅ CORRECTO
 
 ### Cancelación (POST `/aerolinea/cancelarReserva`)
+
+**Request:**
 ```json
 {
   "id_reserva": string,
@@ -142,31 +206,50 @@ Params:
   "observaciones": string
 }
 ```
-**Estado:** ✅ CORRECTO - Usa snake_case según PDF
+
+**Response (lectura):**
+```json
+{
+  "resultado": string,
+  "estado": string,
+  "mensaje": string,
+  "fecha_cancelacion": string     // ✅ No "fechaCancelacion"
+}
+```
+
+**Estado:** ✅ CORRECTO - Request y Response en snake_case
 
 ---
 
 ## 📋 Resumen de Correcciones Realizadas
 
 ### Banco
-**Campos JSON:**
+**Request (envío):**
 - ❌→✅ `descripcion` → `descripcion_pago`
 - ❌→✅ `identificador_cliente` → `cedula_cliente`
 - ❌→✅ `retorno_url` → `url_respuesta`
 - ❌→✅ `callback_url` → `url_notificacion`
 - ➕ Agregado: `nombre_cliente`, `destinatario`
 
+**Response (lectura):**
+- ❌→✅ `id_pago` → `referencia_transaccion`
+- ❌→✅ `url_pago` → `url_banco`
+
 **URLs:**
 - ❌→✅ `/pagos/iniciar` → `/crear-pago`
 
 ### Hotel
+**Request:**
 - ✅ Campos ya correctos (snake_case)
 - ✅ URLs correctas según especificación
 - ➕ Agregado: Soporte dinámico para `num_habitaciones` y `num_adultos` (antes hardcodeados)
 - ✅ Envía campo `estado` en confirmación
 
+**Response:**
+- ✅ Ya usa `id_reserva`, `precio_total` correctamente
+
 ### Aerolínea
-**Campos JSON:**
+**Request (envío):**
 - ❌→✅ `origen_ciudad` → `origen` (camelCase)
 - ❌→✅ `destino_ciudad` → `destino` (camelCase)
 - ❌→✅ `salida` → `fechaSalida` (camelCase)
@@ -175,6 +258,19 @@ Params:
 - ❌→✅ `cabina` → `clase` (camelCase)
 - ❌→✅ Cancelación: camelCase → snake_case (`id_reserva`, `id_transaccion`, `cedula_reserva`)
 - ➕ Agregado: `contactoReserva`, `documentoContacto`, `precioTotalConfirmado`, `estado`
+
+**Response (lectura):**
+- ❌→✅ `consultaId` → `consulta_id`
+- ❌→✅ `vueloId` → `Flight_id` (con mayúscula)
+- ❌→✅ `fechaSalida` → `fecha_salida`
+- ❌→✅ `fechaLlegada` → `fecha_llegada`
+- ❌→✅ `reservaVueloId` → `reserva_vuelo_id`
+- ❌→✅ `precioTotal` → `precio_total`
+- ❌→✅ `fechaExpiracion` → `fecha_expiracion`
+- ❌→✅ `confirmacionId` → `confirmacion_id`
+- ❌→✅ `estadoFinal` → `estado_final`
+- ❌→✅ `codigoTiquete` → `codigo_tiquete`
+- ❌→✅ `fechaCancelacion` → `fecha_cancelacion`
 
 **URLs:**
 - ❌→✅ `/air/search` → `/aerolinea/buscarVuelos`
@@ -186,7 +282,12 @@ Params:
 
 ## ✅ Estado Final: LISTO PARA INTEGRACIÓN
 
-Todos los adaptadores ahora envían y reciben JSON con los nombres de campos EXACTOS especificados en el documento de integración.
+Todos los adaptadores ahora:
+1. ✅ **Envían** (Request) JSON con los nombres de campos EXACTOS del documento
+2. ✅ **Leen** (Response) JSON con los nombres de campos EXACTOS del documento
+3. ✅ **Usan** las URLs/endpoints EXACTOS de los diagramas de secuencia
+
+**El ciclo completo de comunicación está implementado correctamente.**
 
 ---
 

@@ -36,14 +36,14 @@ export class AirlineHttpAdapter implements AirlinePort {
       clase: req.cabin,
     });
     return {
-      queryId: data?.consultaId,
+      queryId: data?.consulta_id,
       flights: (data?.vuelos ?? []).map((v: any) => ({
-        flightId: v?.vueloId,
+        flightId: v?.Flight_id,
         airline: v?.aerolinea,
         originCityId: v?.origen,
         destinationCityId: v?.destino,
-        departsAt: v?.fechaSalida,
-        arrivesAt: v?.fechaLlegada,
+        departsAt: v?.fecha_salida,
+        arrivesAt: v?.fecha_llegada,
         duration: v?.duracion,
         fare: v?.tarifa,
         rules: v?.reglas ?? [],
@@ -62,10 +62,10 @@ export class AirlineHttpAdapter implements AirlinePort {
       documentoContacto: req.clientId,
     });
     return {
-      flightReservationId: data?.reservaVueloId,
-      priceTotal: Number(data?.precioTotal),
+      flightReservationId: data?.reservation_id || data?.reserva_vuelo_id,
+      priceTotal: Number(data?.precio_total),
       initialState: 'PENDIENTE',
-      expiresAt: data?.fechaExpiracion,
+      expiresAt: data?.fecha_expiracion,
     };
   }
 
@@ -77,9 +77,9 @@ export class AirlineHttpAdapter implements AirlinePort {
       estado: 'CONFIRMADO',
     });
     return {
-      confirmedId: data?.confirmacionId,
-      finalState: String(data?.estadoFinal || data?.estado).toUpperCase() === 'CONFIRMADA' ? 'CONFIRMADA' : 'RECHAZADA',
-      ticketCode: data?.codigoTiquete,
+      confirmedId: data?.confirmacion_id,
+      finalState: String(data?.estado_final || data?.estado).toUpperCase() === 'CONFIRMADA' ? 'CONFIRMADA' : 'RECHAZADA',
+      ticketCode: data?.codigo_tiquete,
     };
   }
 
@@ -95,7 +95,7 @@ export class AirlineHttpAdapter implements AirlinePort {
     return {
       state: String(data?.resultado || data?.estado).toUpperCase() === 'APROBADO' ? 'SUCCESS' : 'ERROR',
       message: data?.mensaje ?? undefined,
-      cancelledAt: data?.fechaCancelacion || data?.canceladoEn,
+      cancelledAt: data?.fecha_cancelacion || data?.cancelado_en,
     };
   }
 }
