@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards, Request } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards, Request, NotFoundException } from '@nestjs/common';
 import { ClientsService } from './clients.service';
 import { CreateClientDto } from './dtos/create-client.dto';
 import { UpdateClientDto } from './dtos/update-client.dto';
@@ -22,6 +22,15 @@ export class ClientsController {
       return null;
     }
     return client;
+  }
+
+  @Patch('me')
+  async updateMyProfile(@Request() req: any, @Body() dto: UpdateClientDto) {
+    const client = await this.service.findByEmail(req.user.email);
+    if (!client) {
+      throw new NotFoundException('Cliente no encontrado');
+    }
+    return this.service.update(client.id, dto);
   }
 
   @Get(':id')
