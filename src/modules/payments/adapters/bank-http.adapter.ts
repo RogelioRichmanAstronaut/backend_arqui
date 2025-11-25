@@ -33,7 +33,7 @@ export class BankHttpAdapter implements BankPort {
     const headers: Record<string, string> = {};
     if (p.idempotencyKey) headers['Idempotency-Key'] = p.idempotencyKey;
 
-    const { data } = await this.http.post('/pagos/iniciar', body, { headers });
+    const { data } = await this.http.post('/crear-pago', body, { headers });
     return {
       paymentAttemptExtId: data?.id_pago,
       bankPaymentUrl: data?.url_pago,

@@ -2,7 +2,7 @@
 
 ## ✅ 1. Servicio Banco (`bank-http.adapter.ts`)
 
-### Iniciar Pago (POST `/pagos/iniciar`)
+### Iniciar Pago (POST `/crear-pago`)
 ```json
 {
   "monto_total": number,
@@ -96,7 +96,7 @@ Params:
 
 ## ✅ 3. Servicio Aerolínea (`airline-http.adapter.ts`)
 
-### Búsqueda (POST `/air/search`)
+### Búsqueda (POST `/aerolinea/buscarVuelos`)
 ```json
 {
   "origen": string,
@@ -109,7 +109,7 @@ Params:
 ```
 **Estado:** ✅ CORRECTO - camelCase según PDF
 
-### Reserva (POST `/air/reserve`)
+### Reserva (POST `/aerolinea/reservarVuelo`)
 ```json
 {
   "vueloId": string,
@@ -120,7 +120,7 @@ Params:
 ```
 **Estado:** ✅ CORRECTO - Incluye contacto obligatorio
 
-### Confirmación (POST `/air/confirm`)
+### Confirmación (POST `/aerolinea/confirmarReserva`)
 ```json
 {
   "reservaVueloId": string,
@@ -131,43 +131,56 @@ Params:
 ```
 **Estado:** ✅ CORRECTO - Incluye precio y estado
 
-### Cancelación (POST `/air/cancel`)
+### Cancelación (POST `/aerolinea/cancelarReserva`)
 ```json
 {
-  "confirmacionId": string,
-  "reservaGlobalId": string,
-  "cedula": string,
-  "origenSolicitud": "CLIENTE",
+  "id_reserva": string,
+  "id_transaccion": string,
+  "cedula_reserva": string,
+  "origen_solicitud": "CLIENTE",
   "motivo": string,
   "observaciones": string
 }
 ```
-**Estado:** ✅ CORRECTO - Usa `origenSolicitud` no `origen`
+**Estado:** ✅ CORRECTO - Usa snake_case según PDF
 
 ---
 
 ## 📋 Resumen de Correcciones Realizadas
 
 ### Banco
+**Campos JSON:**
 - ❌→✅ `descripcion` → `descripcion_pago`
 - ❌→✅ `identificador_cliente` → `cedula_cliente`
 - ❌→✅ `retorno_url` → `url_respuesta`
 - ❌→✅ `callback_url` → `url_notificacion`
 - ➕ Agregado: `nombre_cliente`, `destinatario`
 
+**URLs:**
+- ❌→✅ `/pagos/iniciar` → `/crear-pago`
+
 ### Hotel
 - ✅ Campos ya correctos (snake_case)
+- ✅ URLs correctas según especificación
 - ➕ Agregado: Soporte dinámico para `num_habitaciones` y `num_adultos` (antes hardcodeados)
 - ✅ Envía campo `estado` en confirmación
 
 ### Aerolínea
+**Campos JSON:**
 - ❌→✅ `origen_ciudad` → `origen` (camelCase)
 - ❌→✅ `destino_ciudad` → `destino` (camelCase)
 - ❌→✅ `salida` → `fechaSalida` (camelCase)
 - ❌→✅ `regreso` → `fechaRegreso` (camelCase)
 - ❌→✅ `pasajeros` → `numPasajeros` (número, no array)
 - ❌→✅ `cabina` → `clase` (camelCase)
+- ❌→✅ Cancelación: camelCase → snake_case (`id_reserva`, `id_transaccion`, `cedula_reserva`)
 - ➕ Agregado: `contactoReserva`, `documentoContacto`, `precioTotalConfirmado`, `estado`
+
+**URLs:**
+- ❌→✅ `/air/search` → `/aerolinea/buscarVuelos`
+- ❌→✅ `/air/reserve` → `/aerolinea/reservarVuelo`
+- ❌→✅ `/air/confirm` → `/aerolinea/confirmarReserva`
+- ❌→✅ `/air/cancel` → `/aerolinea/cancelarReserva`
 
 ---
 
@@ -202,7 +215,30 @@ Se han eliminado todos los archivos y carpetas no utilizados:
 | **Arquitectura Hexagonal** | ✅ Completa | 100% |
 | **Gobernanza (Formatos, Seguridad)** | ✅ Completa | 100% |
 | **Integración (Campos JSON)** | ✅ Completa | 100% |
+| **Integración (URLs/Endpoints)** | ✅ Completa | 100% |
 | **Limpieza de Código** | ✅ Completa | 100% |
 
 **🎯 PROYECTO 100% LISTO PARA DESPLIEGUE Y PRUEBAS**
+
+---
+
+## 🔍 Verificación de Endpoints
+
+### Banco PSE
+✅ POST `/crear-pago` - Iniciar pago
+✅ GET `/pagos/estado` - Consultar estado
+✅ POST `/pagos/reembolso` - Solicitar reembolso
+✅ POST `/pagos/comprobante/validar` - Validar comprobante
+
+### Aerolínea
+✅ POST `/aerolinea/buscarVuelos` - Búsqueda de vuelos
+✅ POST `/aerolinea/reservarVuelo` - Reservar vuelo
+✅ POST `/aerolinea/confirmarReserva` - Confirmar reserva
+✅ POST `/aerolinea/cancelarReserva` - Cancelar reserva
+
+### Hotel
+✅ GET `/manejadordb/db/reservas/available-rooms` - Búsqueda de habitaciones
+✅ POST `/manejadordb/db/reservas` - Crear reserva
+✅ PUT `/manejadordb/db/reservas/deliberacion` - Confirmar/denegar
+✅ PUT `/manejadordb/db/reservas/cancelacion` - Cancelar reserva
 

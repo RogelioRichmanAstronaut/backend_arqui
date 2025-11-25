@@ -27,7 +27,7 @@ export class AirlineHttpAdapter implements AirlinePort {
   }
 
   async search(req: AirlineSearchRequestDto): Promise<AirlineSearchResponseDto> {
-    const { data } = await this.http.post('/air/search', {
+    const { data } = await this.http.post('/aerolinea/buscarVuelos', {
       origen: req.originCityId,
       destino: req.destinationCityId,
       fechaSalida: req.departureAt ?? null,
@@ -55,7 +55,7 @@ export class AirlineHttpAdapter implements AirlinePort {
   }
 
   async reserve(req: AirlineReserveRequestDto): Promise<AirlineReserveResponseDto> {
-    const { data } = await this.http.post('/air/reserve', {
+    const { data } = await this.http.post('/aerolinea/reservarVuelo', {
       vueloId: req.flightId,
       numPasajeros: req.passengers.length,
       contactoReserva: req.passengers[0]?.name || 'Contacto',
@@ -70,7 +70,7 @@ export class AirlineHttpAdapter implements AirlinePort {
   }
 
   async confirm(req: AirlineConfirmRequestDto): Promise<AirlineConfirmResponseDto> {
-    const { data } = await this.http.post('/air/confirm', {
+    const { data } = await this.http.post('/aerolinea/confirmarReserva', {
       reservaVueloId: req.flightReservationId,
       transaccionId: req.transactionId,
       precioTotalConfirmado: req.totalPrice || 0,
@@ -84,11 +84,11 @@ export class AirlineHttpAdapter implements AirlinePort {
   }
 
   async cancel(req: AirlineCancelRequestDto): Promise<AirlineCancelResponseDto> {
-    const { data } = await this.http.post('/air/cancel', {
-      confirmacionId: req.confirmedId,
-      reservaGlobalId: req.reservationId,
-      cedula: req.origin,
-      origenSolicitud: 'CLIENTE',
+    const { data } = await this.http.post('/aerolinea/cancelarReserva', {
+      id_reserva: req.confirmedId,
+      id_transaccion: req.reservationId,
+      cedula_reserva: req.origin,
+      origen_solicitud: 'CLIENTE',
       motivo: req.reason,
       observaciones: req.notes ?? '',
     });
