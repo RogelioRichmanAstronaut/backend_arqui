@@ -30,6 +30,15 @@ export class ClientsService {
     return client;
   }
 
+  async findByEmail(email: string) {
+    const client = await this.prisma.client.findFirst({ 
+      where: { email, isDeleted: false } 
+    });
+    // Retornar null en lugar de lanzar error si no existe
+    // Esto permite que el frontend maneje la creación del cliente
+    return client;
+  }
+  
   async update(id: string, dto: UpdateClientDto) {
     await this.ensureExists(id);
     return this.prisma.client.update({

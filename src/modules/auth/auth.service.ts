@@ -51,5 +51,47 @@ export class AuthService {
       user: { id: user.id, email: user.email, name: user.name, role: user.role },
     };
   }
+
+  async validateGoogleUser(googleUser: any) {
+    const { email, firstName, lastName } = googleUser;
+    
+    // Buscar o crear usuario
+    let user = await this.prisma.user.findUnique({ 
+      where: { email },
+      select: { id: true, email: true, name: true, role: true },
+    });
+    
+    if (!user) {
+      // Crear nuevo usuario desde Google
+      // Generar un hash aleatorio para usuarios de Google (no se usará para login con contraseña)
+      const randomHash = await this.passwordService.hash(Math.random().toString(36) + Date.now().toString());
+      const newUser = await this.prisma.user.create({
+        data: {
+          email,
+          name: `${firstName || ''} ${lastName || ''}`.trim() || email.split('@')[0],
+          passwordHash: randomHash,
+          role: 'EMPLOYEE',
+          isActive: true,
+        },
+      });
+      user = {
+        id: newUser.id,
+        email: newUser.email,
+        name: newUser.name,
+        role: newUser.role,
+      };
+    }
+
+    // En este punto, user no puede ser null
+    if (!user) {
+      throw new UnauthorizedException('Failed to create or find user');
+    }
+
+    const payload = { email: user.email, sub: user.id, role: user.role };
+    return {
+      access_token: this.jwtService.sign(payload),
+      user: { id: user.id, email: user.email, name: user.name, role: user.role },
+    };
+  }
 }
 

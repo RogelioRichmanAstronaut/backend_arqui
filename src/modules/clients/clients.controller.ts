@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards, Request } from '@nestjs/common';
 import { ClientsService } from './clients.service';
 import { CreateClientDto } from './dtos/create-client.dto';
 import { UpdateClientDto } from './dtos/update-client.dto';
@@ -12,6 +12,16 @@ export class ClientsController {
   @Post()
   create(@Body() dto: CreateClientDto) {
     return this.service.create(dto);
+  }
+
+  @Get('me')
+  async getMyProfile(@Request() req: any) {
+    const client = await this.service.findByEmail(req.user.email);
+    if (!client) {
+      // Retornar null en lugar de 404 para que el frontend pueda crear el cliente
+      return null;
+    }
+    return client;
   }
 
   @Get(':id')
