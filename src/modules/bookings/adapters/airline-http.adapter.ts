@@ -28,23 +28,22 @@ export class AirlineHttpAdapter implements AirlinePort {
 
   async search(req: AirlineSearchRequestDto): Promise<AirlineSearchResponseDto> {
     const { data } = await this.http.post('/air/search', {
-      origen_ciudad: req.originCityId,
-      destino_ciudad: req.destinationCityId,
-      salida: req.departureAt ?? null,
-      regreso: req.returnAt ?? null,
-      pasajeros: req.passengers,
-      cabina: req.cabin,
+      origen: req.originCityId,
+      destino: req.destinationCityId,
+      fechaSalida: req.departureAt ?? null,
+      fechaRegreso: req.returnAt ?? null,
+      numPasajeros: req.passengers,
+      clase: req.cabin,
     });
-    // Normalización → respetar DTO
     return {
-      queryId: data?.consulta_id,
+      queryId: data?.consultaId,
       flights: (data?.vuelos ?? []).map((v: any) => ({
-        flightId: v?.vuelo_id,
+        flightId: v?.vueloId,
         airline: v?.aerolinea,
-        originCityId: v?.origen_ciudad,
-        destinationCityId: v?.destino_ciudad,
-        departsAt: v?.sale,
-        arrivesAt: v?.llega,
+        originCityId: v?.origen,
+        destinationCityId: v?.destino,
+        departsAt: v?.fechaSalida,
+        arrivesAt: v?.fechaLlegada,
         duration: v?.duracion,
         fare: v?.tarifa,
         rules: v?.reglas ?? [],
@@ -57,43 +56,46 @@ export class AirlineHttpAdapter implements AirlinePort {
 
   async reserve(req: AirlineReserveRequestDto): Promise<AirlineReserveResponseDto> {
     const { data } = await this.http.post('/air/reserve', {
-      vuelo_id: req.flightId,
-      reserva_global_id: req.reservationId,
-      cliente_id: req.clientId,
-      pasajeros: req.passengers,
+      vueloId: req.flightId,
+      numPasajeros: req.passengers.length,
+      contactoReserva: req.passengers[0]?.name || 'Contacto',
+      documentoContacto: req.clientId,
     });
     return {
-      flightReservationId: data?.reserva_vuelo_id,
-      priceTotal: Number(data?.precio_total),
+      flightReservationId: data?.reservaVueloId,
+      priceTotal: Number(data?.precioTotal),
       initialState: 'PENDIENTE',
-      expiresAt: data?.expira_en,
+      expiresAt: data?.fechaExpiracion,
     };
   }
 
   async confirm(req: AirlineConfirmRequestDto): Promise<AirlineConfirmResponseDto> {
     const { data } = await this.http.post('/air/confirm', {
-      reserva_vuelo_id: req.flightReservationId,
-      transaccion_id: req.transactionId,
+      reservaVueloId: req.flightReservationId,
+      transaccionId: req.transactionId,
+      precioTotalConfirmado: req.totalPrice || 0,
+      estado: 'CONFIRMADO',
     });
     return {
-      confirmedId: data?.confirmacion_id,
-      finalState: String(data?.estado_final).toUpperCase() === 'CONFIRMADA' ? 'CONFIRMADA' : 'RECHAZADA',
-      ticketCode: data?.codigo_tiquete,
+      confirmedId: data?.confirmacionId,
+      finalState: String(data?.estadoFinal || data?.estado).toUpperCase() === 'CONFIRMADA' ? 'CONFIRMADA' : 'RECHAZADA',
+      ticketCode: data?.codigoTiquete,
     };
   }
 
   async cancel(req: AirlineCancelRequestDto): Promise<AirlineCancelResponseDto> {
     const { data } = await this.http.post('/air/cancel', {
-      confirmacion_id: req.confirmedId,
-      reserva_global_id: req.reservationId,
-      origen: req.origin,
+      confirmacionId: req.confirmedId,
+      reservaGlobalId: req.reservationId,
+      cedula: req.origin,
+      origenSolicitud: 'CLIENTE',
       motivo: req.reason,
-      notas: req.notes ?? null,
+      observaciones: req.notes ?? '',
     });
     return {
-      state: String(data?.resultado ?? 'SUCCESS').toUpperCase() === 'SUCCESS' ? 'SUCCESS' : 'ERROR',
+      state: String(data?.resultado || data?.estado).toUpperCase() === 'APROBADO' ? 'SUCCESS' : 'ERROR',
       message: data?.mensaje ?? undefined,
-      cancelledAt: data?.cancelado_en,
+      cancelledAt: data?.fechaCancelacion || data?.canceladoEn,
     };
   }
 }

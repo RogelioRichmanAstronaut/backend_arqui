@@ -22,21 +22,21 @@ export class BankHttpAdapter implements BankPort {
 
   async initiatePayment(p: InitiatePaymentParams): Promise<InitiatePaymentResult> {
     const body = {
-      identificador_paquete: p.reservationId,
-      identificador_cliente: p.clientId,
-      moneda: p.currency,
       monto_total: p.totalAmount,
-      descripcion: p.description,
-      retorno_url: p.returnUrl,
-      callback_url: p.callbackUrl,
+      descripcion_pago: p.description,
+      cedula_cliente: p.clientId,
+      nombre_cliente: p.clientName || 'Cliente',
+      url_respuesta: p.returnUrl,
+      url_notificacion: p.callbackUrl,
+      destinatario: 'Agencia de Viajes',
     };
     const headers: Record<string, string> = {};
     if (p.idempotencyKey) headers['Idempotency-Key'] = p.idempotencyKey;
 
     const { data } = await this.http.post('/pagos/iniciar', body, { headers });
     return {
-      paymentAttemptExtId: data?.identificador_intento_pago,
-      bankPaymentUrl: data?.url_pago_banco,
+      paymentAttemptExtId: data?.id_pago,
+      bankPaymentUrl: data?.url_pago,
       initialState: 'PENDIENTE',
       expiresAt: data?.fecha_expiracion,
     };
@@ -44,39 +44,39 @@ export class BankHttpAdapter implements BankPort {
 
   async getStatus(p: PaymentStatusParams): Promise<PaymentStatusResult> {
     const params: any = {};
-    if (p.transactionId) params.identificador_transaccion_banco = p.transactionId;
-    if (p.paymentAttemptExtId) params.identificador_intento_pago = p.paymentAttemptExtId;
+    if (p.transactionId) params.id_transaccion = p.transactionId;
+    if (p.paymentAttemptExtId) params.id_pago = p.paymentAttemptExtId;
 
     const { data } = await this.http.get('/pagos/estado', { params });
     return {
-      state: String(data?.estado_actual ?? 'PENDIENTE').toUpperCase() as any,
-      stateDetail: data?.detalle_estado,
-      totalAmount: Number(data?.monto_total ?? 0),
-      currency: data?.moneda,
+      state: String(data?.estado ?? 'PENDIENTE').toUpperCase() as any,
+      stateDetail: data?.detalle,
+      totalAmount: Number(data?.monto ?? 0),
+      currency: data?.moneda || 'COP',
       authCode: data?.codigo_autorizacion,
-      receiptRef: data?.comprobante_url_o_hash,
-      lastUpdateAt: data?.fecha_ultimo_cambio,
+      receiptRef: data?.comprobante,
+      lastUpdateAt: data?.fecha_actualizacion,
     };
   }
 
   async refund(p: RefundParams): Promise<RefundResult> {
     const { data } = await this.http.post('/pagos/reembolso', {
-      identificador_transaccion_banco: p.transactionId,
-      monto_reembolso: p.amount,
+      id_transaccion: p.transactionId,
+      monto: p.amount,
     });
     return {
-      refundId: data?.identificador_reembolso,
-      refundState: String(data?.estado_reembolso ?? 'PENDIENTE').toUpperCase() as any,
-      receiptRef: data?.comprobante_url_o_hash,
-      refundedAt: data?.fecha_reembolso,
+      refundId: data?.id_reembolso,
+      refundState: String(data?.estado ?? 'PENDIENTE').toUpperCase() as any,
+      receiptRef: data?.comprobante,
+      refundedAt: data?.fecha,
     };
   }
 
   async validateReceipt(p: ValidateReceiptParams): Promise<ValidateReceiptResult> {
     const { data } = await this.http.post('/pagos/comprobante/validar', {
-      identificador_transaccion_banco: p.transactionId,
+      id_transaccion: p.transactionId,
       monto_esperado: p.expectedAmount,
     });
-    return { valid: String(data?.valido).toUpperCase() === 'SI', detail: data?.detalle_validacion ?? '' };
+    return { valid: String(data?.valido).toUpperCase() === 'SI', detail: data?.detalle ?? '' };
   }
 }

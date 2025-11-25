@@ -1,6 +1,7 @@
 export interface InitiatePaymentParams {
     reservationId: string;   // business id de Reservation
     clientId: string;        // <TIPO>-<NUMERO>
+    clientName?: string;     // Nombre del cliente
     currency: string;        // ISO-4217
     totalAmount: number;
     description: string;

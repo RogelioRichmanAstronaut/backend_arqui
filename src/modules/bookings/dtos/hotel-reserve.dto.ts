@@ -1,4 +1,4 @@
-import { IsUUID, IsDateString } from 'class-validator';
+import { IsUUID, IsDateString, IsInt, Min, IsOptional } from 'class-validator';
 import { IsClientID } from '../../common/validation/decorators/is-client-id';
 
 export class HotelReserveRequestDto {
@@ -8,6 +8,8 @@ export class HotelReserveRequestDto {
   @IsDateString() checkIn!: string;
   @IsDateString() checkOut!: string;
   @IsUUID('4') reservationId!: string; // vínculo a la reserva global
+  @IsOptional() @IsInt() @Min(1) rooms?: number;
+  @IsOptional() @IsInt() @Min(1) adults?: number;
 }
 
 export class HotelReserveResponseDto {

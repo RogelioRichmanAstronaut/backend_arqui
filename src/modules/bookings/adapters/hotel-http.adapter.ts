@@ -27,69 +27,74 @@ export class HotelHttpAdapter implements HotelPort {
   }
 
   async search(req: HotelSearchRequestDto): Promise<HotelSearchResponseDto> {
-    const { data } = await this.http.post('/hotels/search', {
-      ciudad: req.cityId,
-      entrada: req.checkIn,
-      salida: req.checkOut,
-      adultos: req.adults,
-      habitaciones: req.rooms,
+    const { data } = await this.http.get('/manejadordb/db/reservas/available-rooms', {
+      params: {
+        ciudad_destino: req.cityId,
+        fecha_checkin: req.checkIn,
+        fecha_checkout: req.checkOut,
+        num_adultos: req.adults,
+        num_habitaciones: req.rooms,
+      },
     });
     return {
       hotelId: data?.hotel_id,
       name: data?.nombre,
       cityId: data?.ciudad,
-      amenities: data?.amenidades ?? [],
-      roomTypes: (data?.tipos_habitacion ?? []).map((t: any) => ({
+      amenities: data?.servicios_hotel ?? [],
+      roomTypes: (data?.habitaciones ?? []).map((t: any) => ({
         roomType: t?.tipo,
-        priceTotal: Number(t?.precio_total),
-        currency: t?.moneda,
+        priceTotal: Number(t?.precio),
+        currency: 'COP',
       })),
     };
   }
 
   async reserve(req: HotelReserveRequestDto): Promise<HotelReserveResponseDto> {
-    const { data } = await this.http.post('/hotels/reserve', {
-      hotel_id: req.hotelId,
-      room_id: req.roomId,
-      cliente_id: req.clientId,
-      entrada: req.checkIn,
-      salida: req.checkOut,
-      reserva_global_id: req.reservationId,
+    const { data } = await this.http.post('/manejadordb/db/reservas', {
+      id_hotel: req.hotelId,
+      codigo_tipo_habitacion: req.roomId,
+      fecha_checkin: req.checkIn,
+      fecha_checkout: req.checkOut,
+      cedula_reserva: req.clientId,
+      num_habitaciones: req.rooms || 1,
+      num_adultos: req.adults || 1,
     });
     return {
-      hotelReservationId: data?.reserva_hotel_id,
+      hotelReservationId: data?.id_reserva || data?.id_reserva_provisional,
       priceTotal: Number(data?.precio_total),
-      currency: data?.moneda,
-      expiresAt: data?.expira_en,
+      currency: 'COP',
+      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
       initialState: 'PENDIENTE',
     };
   }
 
   async confirm(req: HotelConfirmRequestDto): Promise<HotelConfirmResponseDto> {
-    const { data } = await this.http.post('/hotels/confirm', {
-      reserva_hotel_id: req.hotelReservationId,
-      transaccion_id: req.transactionId,
+    const { data } = await this.http.put('/manejadordb/db/reservas/deliberacion', {
+      id_reserva: req.hotelReservationId,
+      id_transaccion: req.transactionId,
+      estado: 'CONFIRMADO',
     });
     return {
-      confirmedId: data?.confirmacion_id,
-      finalState: String(data?.estado_final).toUpperCase() === 'CONFIRMADA' ? 'CONFIRMADA' : 'RECHAZADA',
-      voucherCode: data?.codigo_voucher,
+      confirmedId: data?.id_reserva,
+      finalState: String(data?.estado || data?.estado_final).toUpperCase() === 'CONFIRMADA' ? 'CONFIRMADA' : 'RECHAZADA',
+      voucherCode: data?.codigo_voucher || data?.id_reserva,
       audit: data?.audit ?? undefined,
     };
   }
 
   async cancel(req: HotelCancelRequestDto): Promise<HotelCancelResponseDto> {
-    const { data } = await this.http.post('/hotels/cancel', {
-      confirmacion_id: req.confirmedId,
-      reserva_global_id: req.reservationId,
-      origen: req.origin,
+    const { data } = await this.http.put('/manejadordb/db/reservas/cancelacion', {
+      id_reserva: req.confirmedId,
+      id_transaccion: req.reservationId,
+      cedula_reserva: req.origin,
+      origen_solicitud: 'CLIENTE',
       motivo: req.reason,
-      notas: req.notes ?? null,
+      observaciones: req.notes ?? '',
     });
     return {
-      state: String(data?.resultado ?? 'SUCCESS').toUpperCase() === 'SUCCESS' ? 'SUCCESS' : 'ERROR',
-      message: data?.mensaje ?? undefined,
-      cancelledAt: data?.cancelado_en,
+      state: String(data?.estado || data?.estado_inicial).toUpperCase() === 'APROBADO' ? 'SUCCESS' : 'ERROR',
+      message: data?.observaciones ?? undefined,
+      cancelledAt: data?.fecha_registro || new Date().toISOString(),
     };
   }
 }
