@@ -209,10 +209,17 @@ case "$CMD" in
 
     echo "--- 4. Instalar todas las dependencias para la compilación ---"
     # FIX: Install ALL dependencies (including dev) to ensure 'nest build' finds the CLI locally.
-    # This addresses the 'could not determine executable' and 'nest: not found' errors.
     npm install
+    
+    echo "--- 4b. Generar Schema y Migraciones de DB (FIX para 'table does not exist') ---"
+    # Execute Prisma Generate to create the client based on the updated schema
+    npx prisma generate
+    # Execute Migrate Deploy to apply all existing migrations to the database
+    # NOTE: If you are using `migrate dev` in production, it will prompt you 
+    # unless you force it, but `migrate deploy` is best for production.
+    npx prisma migrate deploy
 
-    echo "--- 4b. Compilar la aplicación (using 'npx nest build' via package.json) ---"
+    echo "--- 4c. Compilar la aplicación (using 'npx nest build' via package.json) ---"
     npm run build
 
     if [ $? -ne 0 ]; then
@@ -220,7 +227,7 @@ case "$CMD" in
         exit 1
     fi
     
-    echo "--- 4c. Optimizar dependencias para producción (solo runtime) ---"
+    echo "--- 4d. Optimizar dependencias para producción (solo runtime) ---"
     # Clean up and install only necessary production dependencies before starting
     npm ci --only=production
 
