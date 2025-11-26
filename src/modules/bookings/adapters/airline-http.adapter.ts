@@ -14,6 +14,15 @@ import {
   AirlineCancelRequestDto, AirlineCancelResponseDto,
 } from '../dtos/airline-cancel.dto';
 
+/**
+ * Adapter HTTP para el servicio de Aerolínea
+ * 
+ * Endpoints reales (IP: 10.43.103.34:8080):
+ * - POST /v1/vuelos/buscar
+ * - POST /v1/vuelos/reservar
+ * - PUT  /v1/vuelos/reservas/{reservaVueloId}/confirmar
+ * - DELETE /v1/vuelos/reservas/{reservaVueloId}
+ */
 export class AirlineHttpAdapter implements AirlinePort {
   private http: AxiosInstance;
   private cfg = airlineConfig();
@@ -26,8 +35,12 @@ export class AirlineHttpAdapter implements AirlinePort {
     });
   }
 
+  /**
+   * Búsqueda de vuelos
+   * POST /v1/vuelos/buscar
+   */
   async search(req: AirlineSearchRequestDto): Promise<AirlineSearchResponseDto> {
-    const { data } = await this.http.post('/aerolinea/buscarVuelos', {
+    const { data } = await this.http.post('/v1/vuelos/buscar', {
       origen: req.originCityId,
       destino: req.destinationCityId,
       fechaSalida: req.departureAt ?? null,
@@ -36,66 +49,74 @@ export class AirlineHttpAdapter implements AirlinePort {
       clase: req.cabin,
     });
     return {
-      queryId: data?.consulta_id,
+      queryId: data?.consultaId ?? data?.consulta_id,
       flights: (data?.vuelos ?? []).map((v: any) => ({
-        flightId: v?.Flight_id,
+        flightId: v?.vueloId ?? v?.Flight_id ?? v?.id,
         airline: v?.aerolinea,
         originCityId: v?.origen,
         destinationCityId: v?.destino,
-        departsAt: v?.fecha_salida,
-        arrivesAt: v?.fecha_llegada,
+        departsAt: v?.fechaSalida ?? v?.fecha_salida,
+        arrivesAt: v?.fechaLlegada ?? v?.fecha_llegada,
         duration: v?.duracion,
-        fare: v?.tarifa,
+        fare: v?.tarifa ?? v?.clase,
         rules: v?.reglas ?? [],
         price: Number(v?.precio),
-        currency: v?.moneda,
+        currency: v?.moneda ?? 'COP',
         baggage: v?.equipaje,
       })),
     };
   }
 
+  /**
+   * Reserva de vuelo (pre-reserva)
+   * POST /v1/vuelos/reservar
+   */
   async reserve(req: AirlineReserveRequestDto): Promise<AirlineReserveResponseDto> {
-    const { data } = await this.http.post('/aerolinea/reservarVuelo', {
+    const { data } = await this.http.post('/v1/vuelos/reservar', {
       vueloId: req.flightId,
       numPasajeros: req.passengers.length,
       contactoReserva: req.passengers[0]?.name || 'Contacto',
       documentoContacto: req.clientId,
     });
     return {
-      flightReservationId: data?.reservation_id || data?.reserva_vuelo_id,
-      priceTotal: Number(data?.precio_total),
+      flightReservationId: data?.reservaVueloId ?? data?.reservation_id ?? data?.id,
+      priceTotal: Number(data?.precioTotal ?? data?.precio_total),
       initialState: 'PENDIENTE',
-      expiresAt: data?.fecha_expiracion,
+      expiresAt: data?.fechaExpiracion ?? data?.fecha_expiracion ?? new Date(Date.now() + 30 * 60 * 1000).toISOString(),
     };
   }
 
+  /**
+   * Confirmación de reserva (después del pago bancario)
+   * PUT /v1/vuelos/reservas/{reservaVueloId}/confirmar
+   */
   async confirm(req: AirlineConfirmRequestDto): Promise<AirlineConfirmResponseDto> {
-    const { data } = await this.http.post('/aerolinea/confirmarReserva', {
-      reservaVueloId: req.flightReservationId,
-      transaccionId: req.transactionId,
-      precioTotalConfirmado: req.totalPrice || 0,
-      estado: 'CONFIRMADO',
-    });
+    const { data } = await this.http.put(
+      `/v1/vuelos/reservas/${req.flightReservationId}/confirmar`,
+      {
+        transaccionBancariaId: req.transactionId,
+        metodoPago: 'TARJETA_CREDITO',
+      }
+    );
     return {
-      confirmedId: data?.confirmacion_id,
-      finalState: String(data?.estado_final || data?.estado).toUpperCase() === 'CONFIRMADA' ? 'CONFIRMADA' : 'RECHAZADA',
-      ticketCode: data?.codigo_tiquete,
+      confirmedId: data?.reservaConfirmadaId ?? data?.confirmacion_id ?? req.flightReservationId,
+      finalState: String(data?.estadoFinal ?? data?.estado_final ?? data?.estado).toUpperCase() === 'CONFIRMADA' ? 'CONFIRMADA' : 'RECHAZADA',
+      ticketCode: data?.codigoTiquete ?? data?.codigo_tiquete ?? data?.pnr ?? '',
     };
   }
 
+  /**
+   * Cancelación de reserva
+   * DELETE /v1/vuelos/reservas/{reservaVueloId}
+   */
   async cancel(req: AirlineCancelRequestDto): Promise<AirlineCancelResponseDto> {
-    const { data } = await this.http.post('/aerolinea/cancelarReserva', {
-      id_reserva: req.confirmedId,
-      id_transaccion: req.reservationId,
-      cedula_reserva: req.origin,
-      origen_solicitud: 'CLIENTE',
-      motivo: req.reason,
-      observaciones: req.notes ?? '',
-    });
+    const { data } = await this.http.delete(
+      `/v1/vuelos/reservas/${req.confirmedId}`
+    );
     return {
-      state: String(data?.resultado || data?.estado).toUpperCase() === 'APROBADO' ? 'SUCCESS' : 'ERROR',
+      state: String(data?.estado ?? data?.resultado).toUpperCase() === 'SUCCESS' ? 'SUCCESS' : 'ERROR',
       message: data?.mensaje ?? undefined,
-      cancelledAt: data?.fecha_cancelacion || data?.cancelado_en,
+      cancelledAt: data?.fechaCancelacion ?? data?.fecha_cancelacion ?? new Date().toISOString(),
     };
   }
 }
