@@ -17,6 +17,7 @@ DB_PORT_ACTUAL="" # Actual port resolved at runtime
 APP_NAME="${APP_NAME:-nestjs-turismo}"
 APP_PORT="${APP_PORT:-3000}" # NestJS Port
 APP_ENTRY="${APP_ENTRY:-./dist/main.js}" # Path to the compiled entry file
+PM2_CONFIG_FILE="ecosystem.config.js"
 
 ENV_FILE="${ROOT_DIR}/.env"
 
@@ -143,6 +144,38 @@ write_env() {
   echo "📄 .env actualizado con éxito en: ${ENV_FILE}"
 }
 
+create_pm2_config() {
+  echo "📄 Creando archivo de configuración PM2 (${PM2_CONFIG_FILE})..."
+  cat > "${PM2_CONFIG_FILE}" <<EOF
+/**
+ * PM2 Ecosystem Configuration File for NestJS
+ * Automatically created by deploy.sh
+ */
+module.exports = {
+  apps: [
+    {
+      name: '${APP_NAME}',
+      script: '${APP_ENTRY}',
+      interpreter: 'node',
+      args: 'start',
+      instances: 'max',
+      exec_mode: 'cluster',
+      watch: false,
+      ignore_watch: ['node_modules', 'logs'],
+      // Load the .env file explicitly
+      env_production: {
+        NODE_ENV: 'production',
+        PORT: ${APP_PORT},
+      },
+      env_file: '${ENV_FILE}', 
+      // This tells PM2 to look for the .env file in the current directory and load its contents.
+    },
+  ],
+};
+EOF
+  echo "✔ Configuración PM2 generada."
+}
+
 print_usage() {
   cat <<EOF
 Uso:
@@ -208,15 +241,10 @@ case "$CMD" in
     app_prerequisites_must_be_ready
 
     echo "--- 4. Instalar todas las dependencias para la compilación ---"
-    # FIX: Install ALL dependencies (including dev) to ensure 'nest build' finds the CLI locally.
     npm install
     
     echo "--- 4b. Generar Schema y Migraciones de DB (FIX para 'table does not exist') ---"
-    # Execute Prisma Generate to create the client based on the updated schema
     npx prisma generate
-    # Execute Migrate Deploy to apply all existing migrations to the database
-    # NOTE: If you are using `migrate dev` in production, it will prompt you 
-    # unless you force it, but `migrate deploy` is best for production.
     npx prisma migrate deploy
 
     echo "--- 4c. Compilar la aplicación (using 'npx nest build' via package.json) ---"
@@ -228,15 +256,17 @@ case "$CMD" in
     fi
     
     echo "--- 4d. Optimizar dependencias para producción (solo runtime) ---"
-    # Clean up and install only necessary production dependencies before starting
     npm ci --only=production
+    
+    echo "--- 5. Crear configuración PM2 (Ecosystem) ---"
+    create_pm2_config
 
-    echo "--- 5. Iniciar/Reiniciar la aplicación con PM2 ---"
+    echo "--- 6. Iniciar/Reiniciar la aplicación con PM2 (Usando Ecosystem) ---"
     # Eliminar cualquier proceso PM2 anterior
     pm2 delete $APP_NAME 2> /dev/null
 
-    # Iniciar la aplicación. Se asume que la app lee el PORT del .env.
-    pm2 start $APP_ENTRY --name $APP_NAME --interpreter node -- start
+    # Iniciar la aplicación usando el archivo de configuración, lo que garantiza la carga del .env
+    pm2 start $PM2_CONFIG_FILE --env production
     
     # Guardar la lista de procesos para que se reinicie al iniciar el sistema
     pm2 save
