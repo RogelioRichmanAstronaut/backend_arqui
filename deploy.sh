@@ -76,25 +76,23 @@ ensure_container() {
   local name="$1"
   local db_port="$2"
   
-  if docker ps -q -f "name=^/${name}$" >/dev/null | grep -q .; then
-    echo "✔ Contenedor ${name} ya está corriendo."
-    return 0
+  # Check if the container exists (running or stopped)
+  if docker ps -aq -f "name=^/${name}$" >/dev/null | grep -q .; then
+    echo "⚠️ Contenedor ${name} existente. Deteniendo y eliminando para recrear (Volumen de datos permanece)."
+    # Stop and forcefully remove the existing container
+    docker rm -f "$name" >/dev/null 2>&1 || true
   fi
 
-  if docker ps -aq -f "name=^/${name}$" >/dev/null | grep -q .; then
-    echo "⚙️  Iniciando contenedor existente ${name}..."
-    docker start "$name" >/dev/null
-  else
-    echo "🚀 Creando contenedor ${name} en puerto ${db_port}..."
-    docker run -d \
-      --name "$name" \
-      -e POSTGRES_USER="$DB_USER" \
-      -e POSTGRES_PASSWORD="$DB_PASSWORD" \
-      -e POSTGRES_DB="$DB_NAME" \
-      -p "${db_port}:5432" \
-      -v "${name}-data":/var/lib/postgresql/data \
-      "$DB_IMAGE" >/dev/null
-  fi
+  echo "🚀 Creando contenedor ${name} en puerto ${db_port}..."
+  # Create and run the new container
+  docker run -d \
+    --name "$name" \
+    -e POSTGRES_USER="$DB_USER" \
+    -e POSTGRES_PASSWORD="$DB_PASSWORD" \
+    -e POSTGRES_DB="$DB_NAME" \
+    -p "${db_port}:5432" \
+    -v "${name}-data":/var/lib/postgresql/data \
+    "$DB_IMAGE" >/dev/null
 }
 
 wait_for_postgres() {
@@ -209,16 +207,22 @@ case "$CMD" in
     echo "--- Despliegue de Aplicación NestJS ---"
     app_prerequisites_must_be_ready
 
-    echo "--- 4. Instalar dependencias de producción y construir ---"
-    # Instalar dependencias
-    npm ci --only=production
-    # Compilar TypeScript (ejecuta el script 'build' en package.json)
+    echo "--- 4. Instalar todas las dependencias para la compilación ---"
+    # FIX: Install ALL dependencies (including dev) to ensure 'nest build' finds the CLI locally.
+    # This addresses the 'could not determine executable' and 'nest: not found' errors.
+    npm install
+
+    echo "--- 4b. Compilar la aplicación (using 'npx nest build' via package.json) ---"
     npm run build
 
     if [ $? -ne 0 ]; then
         echo "ERROR: La construcción de NestJS falló. Verifique 'npm run build'."
         exit 1
     fi
+    
+    echo "--- 4c. Optimizar dependencias para producción (solo runtime) ---"
+    # Clean up and install only necessary production dependencies before starting
+    npm ci --only=production
 
     echo "--- 5. Iniciar/Reiniciar la aplicación con PM2 ---"
     # Eliminar cualquier proceso PM2 anterior
