@@ -262,12 +262,24 @@ case "$CMD" in
     create_pm2_config
 
     echo "--- 6. Iniciar/Reiniciar la aplicación con PM2 (Usando Ecosystem) ---"
-    # Eliminar cualquier proceso PM2 anterior
+    # Eliminar cualquier proceso PM2 anterior (ensuring a clean slate)
     pm2 delete $APP_NAME 2> /dev/null
 
-    # Iniciar la aplicación usando el archivo de configuración, lo que garantiza la carga del .env
+    # Iniciar la aplicación using the configuration file
     pm2 start $PM2_CONFIG_FILE --env production
     
+    # Check if the process started before saving
+    if pm2 list | grep -q "$APP_NAME"; then
+        echo "✔ Aplicación iniciada y listada en PM2. Forzando recarga de configuración."
+        # Force a reload to stabilize the cluster/process
+        pm2 reload $APP_NAME --silent
+    else
+        echo "❌ ERROR: El proceso PM2 falló inmediatamente después de iniciarse."
+        echo "Por favor, revise los logs para el error de inicio:"
+        pm2 logs $APP_NAME --lines 50 || true
+        exit 1
+    fi
+
     # Guardar la lista de procesos para que se reinicie al iniciar el sistema
     pm2 save
 
