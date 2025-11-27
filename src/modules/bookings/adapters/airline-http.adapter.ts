@@ -61,8 +61,12 @@ export class AirlineHttpAdapter implements AirlinePort {
         numPasajeros: req.passengers,
         clase: req.cabin,
       });
+      
+      // La aerolínea puede devolver consultaId: null cuando no hay vuelos
+      const queryId = data?.consultaId || data?.consulta_id || `no-flights-${Date.now()}`;
+      
       return {
-        queryId: data?.consultaId ?? data?.consulta_id,
+        queryId,
         flights: (data?.vuelos ?? []).map((v: any) => ({
           flightId: v?.vueloId ?? v?.Flight_id ?? v?.id,
           airline: v?.aerolinea,
@@ -80,11 +84,13 @@ export class AirlineHttpAdapter implements AirlinePort {
         })),
       };
     } catch (error: any) {
-      // 404 = No hay vuelos disponibles (no es un error real)
-      if (error.response?.status === 404) {
+      // 400/404 = No hay vuelos disponibles para esa ruta/fecha
+      // La aerolínea devuelve 400 con {consultaId:null,vuelos:[]} cuando no hay vuelos
+      if (error.response?.status === 404 || error.response?.status === 400) {
+        const data = error.response?.data;
         return {
-          queryId: error.response?.data?.consultaId ?? 'no-flights',
-          flights: [],
+          queryId: data?.consultaId || `no-flights-${Date.now()}`,
+          flights: Array.isArray(data?.vuelos) ? data.vuelos : [],
         };
       }
       // Otros errores sí los propagamos
