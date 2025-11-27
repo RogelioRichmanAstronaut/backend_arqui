@@ -10,7 +10,20 @@ export class HotelSearchRequestDto {
 }
 
 export class HotelSearchResponseDto {
-  hotelId!: string; name!: string; cityId!: string;
+  queryId?: string;
+  hotelId!: string;
+  name!: string;
+  cityId!: string;
+  stars?: number;
   amenities!: string[];
-  roomTypes!: Array<{ roomType: string; priceTotal: number; currency: string }>;
+  photos?: string[];
+  roomTypes!: Array<{
+    roomId?: string;
+    roomType: string;
+    roomCode?: string;
+    available?: boolean;
+    priceTotal: number;
+    currency: string;
+    amenities?: string[];
+  }>;
 }

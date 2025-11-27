@@ -1,0 +1,659 @@
+### ============================================
+### PRUEBAS DE INTEGRACIÓN - SISTEMA DE TURISMO
+### Basado en Documento de Gobernanza de Datos
+### ============================================
+###
+### ESTADO DE SERVICIOS (actualizado 2025-11-26):
+### - Turismo (localhost:3001): ✅ OK - Auth, Clientes, Carrito, Quote
+### - Aerolínea (10.43.103.34:8080): ✅ PRODUCCIÓN - IP Pública
+### - Banco (localhost:3000): ⚠️ Endpoints legacy /api/pagos/*
+### - Hotel (10.43.103.234:8080): ⚠️ Responde 400 (puede requerir parámetros específicos)
+###
+### VUELOS DISPONIBLES EN AEROLÍNEA PRODUCCIÓN (fecha: 2025-12-01):
+### - f47ac10b-58cc-4372-a567-0e02b2c3d479 (BOG→MDE, 08:00, $250,000)
+### - c77ce5aa-b64a-4749-974a-8ba4a3336164 (BOG→MDE, 14:00, $280,000)
+### - d6169429-f777-44d3-9c44-ff2b0a4c7300 (BOG→MDE, 18:00, $300,000)
+###
+### NOTA: Backend Arqui usa AIRLINE_BASE_URL=http://10.43.103.34:8080
+###
+### ENDPOINTS HOTEL según documento:
+### - GET  /manejadordb/db/reservas/available-rooms
+### - POST /manejadordb/db/reservas
+### - PUT  /manejadordb/db/reservas/deliberacion
+### - PUT  /manejadordb/db/reservas/cancelacion
+###
+### ============================================
+
+### Variables globales
+@baseUrl = http://localhost:3001/v1
+@bankUrl = http://localhost:3000
+@airlineUrl = http://10.43.103.34:8080/v1
+@hotelUrl = http://10.43.103.234:8080/manejadordb
+@token = {{login.response.body.access_token}}
+@clientUuid = {{createClient.response.body.id}}
+@cartId = {{addToCart.response.body.id}}
+
+### ============================================
+### CASO 0: Health Checks
+### ============================================
+
+### Health check - Turismo
+GET {{baseUrl}}/health
+
+###
+
+### Ready check - Turismo
+GET {{baseUrl}}/ready
+
+###
+
+### ============================================
+### CASO 1: Autenticación
+### ============================================
+
+### 1.1 Registrar usuario empleado
+POST {{baseUrl}}/auth/register
+Content-Type: application/json
+
+{
+  "email": "empleado@turismo.com",
+  "password": "password123",
+  "name": "Empleado Test",
+  "role": "EMPLOYEE"
+}
+
+###
+
+### 1.2 Login y obtener JWT
+# @name login
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "empleado@turismo.com",
+  "password": "password123"
+}
+
+###
+
+### ============================================
+### CASO 2: Gestión de Clientes (CRUD)
+### Formato ClientID según gobernanza: <tipoDoc>-<numero>
+### ============================================
+
+### 2.1 Crear cliente
+# @name createClient
+POST {{baseUrl}}/clients
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "clientId": "CC-1032456789",
+  "name": "Juan Perez",
+  "email": "juan@email.com",
+  "phone": "3001234567"
+}
+
+###
+
+### 2.2 Consultar cliente
+GET {{baseUrl}}/clients/{{clientUuid}}
+Authorization: Bearer {{token}}
+
+###
+
+### 2.3 Actualizar cliente
+PATCH {{baseUrl}}/clients/{{clientUuid}}
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "name": "Juan Carlos Perez",
+  "phone": "3009876543"
+}
+
+###
+
+### ============================================
+### CASO 3: Catálogo de Ciudades
+### Formato CityID según gobernanza: ISO 3166-2 (ej: CO-BOG)
+### ============================================
+
+### 3.1 Obtener todas las ciudades
+GET {{baseUrl}}/catalog/cities
+
+###
+
+### ============================================
+### CASO 4: Vuelos (Aerolínea)
+### Servicio Aerolínea: http://localhost:8080
+### ENDPOINTS según documento:
+### - POST /v1/vuelos/buscar
+### - POST /v1/vuelos/reservar
+### - PUT  /v1/vuelos/reservas/{id}/confirmar
+### - DELETE /v1/vuelos/reservas/{id}
+### ============================================
+
+### 4.1 Buscar vuelos (DIRECTO a aerolínea)
+# @name searchFlights
+# NOTA: La aerolínea tiene vuelos para 2025-12-01
+POST {{airlineUrl}}/vuelos/buscar
+Content-Type: application/json
+
+{
+  "origen": "BOG",
+  "destino": "MDE",
+  "fechaSalida": "2025-12-01",
+  "fechaRegreso": null,
+  "numPasajeros": 2,
+  "clase": "ECONOMICA"
+}
+
+###
+
+### 4.2 Buscar vuelos vía Turismo (proxy)
+# NOTA: La aerolínea tiene vuelos para 2025-12-01
+POST {{baseUrl}}/bookings/air/search
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "originCityId": "CO-BOG",
+  "destinationCityId": "CO-MDE",
+  "departureAt": "2025-12-01",
+  "passengers": 2,
+  "cabin": "ECONOMICA"
+}
+
+###
+
+### 4.3 Reservar vuelo (DIRECTO a aerolínea)
+# @name reserveFlight
+# IDs de vuelos en PRODUCCIÓN (10.43.103.34:8080, fecha: 2025-12-01):
+# - f47ac10b-58cc-4372-a567-0e02b2c3d479 (08:00, $250,000)
+# - c77ce5aa-b64a-4749-974a-8ba4a3336164 (14:00, $280,000)
+# - d6169429-f777-44d3-9c44-ff2b0a4c7300 (18:00, $300,000)
+POST {{airlineUrl}}/vuelos/reservar
+Content-Type: application/json
+
+{
+  "vueloId": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+  "numPasajeros": 2,
+  "contactoReserva": "Juan Perez",
+  "documentoContacto": "CC-1032456789"
+}
+
+###
+
+### 4.4 Reservar vuelo vía Turismo (proxy)
+# @name reserveFlightProxy
+# NOTA: El adaptador convierte CO-BOG → BOG automáticamente
+POST {{baseUrl}}/bookings/air/reserve
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "reservationId": "{{$guid}}",
+  "flightId": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+  "clientId": "CC-1032456789",
+  "passengers": [
+    {"name": "Juan Perez", "doc": "CC-1032456789"},
+    {"name": "Maria Garcia", "doc": "CC-9876543210"}
+  ]
+}
+
+###
+
+### 4.5 Confirmar reserva vuelo (DIRECTO a aerolínea)
+PUT {{airlineUrl}}/vuelos/reservas/{{reserveFlight.response.body.reservaVueloId}}/confirmar
+Content-Type: application/json
+
+{
+  "transaccionBancariaId": "BDB-20251126-ABC123",
+  "metodoPago": "PSE"
+}
+
+###
+
+### 4.6 Confirmar vuelo vía Turismo (proxy)
+# NOTA: flightReservationId es formato RSV... de la aerolínea (no UUID)
+POST {{baseUrl}}/bookings/air/confirm
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "flightReservationId": "{{reserveFlightProxy.response.body.flightReservationId}}",
+  "transactionId": "BDB-20251126-ABC123"
+}
+
+###
+
+### 4.7 Cancelar reserva vuelo (DIRECTO a aerolínea)
+DELETE {{airlineUrl}}/vuelos/reservas/{{reserveFlight.response.body.reservaVueloId}}
+
+###
+
+### 4.8 Cancelar vuelo vía Turismo (proxy)
+POST {{baseUrl}}/bookings/air/cancel
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "confirmedId": "<CONFIRMED_FLIGHT_UUID>",
+  "reservationId": "<RESERVATION_UUID>",
+  "origin": "CLIENTE",
+  "reason": "Cambio de planes"
+}
+
+###
+
+### ============================================
+### CASO 5: Búsqueda de Hoteles
+### Servicio Hotel: http://10.43.103.234:8080
+### ============================================
+###
+### HOTELES DISPONIBLES EN PRODUCCIÓN:
+### - Bogotá: Gran Hotel Andino (a32ab199-4381-4d33-9c61-590b323e6e92)
+### - Cartagena: Caribe Colonial Resort (618f172c-a72e-4098-aa04-de1d04cc4867)
+###
+### NOTA: El hotel usa GET con BODY JSON (no query params)
+### NOTA: Backend Arqui convierte CO-BOG → "Bogotá" automáticamente
+###
+
+### 5.1 Buscar habitaciones disponibles (DIRECTO al hotel)
+# NOTA: Este endpoint usa GET con body JSON
+# @name searchHotelDirect
+GET {{hotelUrl}}/db/reservas/available-rooms
+Content-Type: application/json
+
+{
+  "ciudad_destino": "Bogotá",
+  "fecha_checkin": "2025-12-20",
+  "fecha_checkout": "2025-12-25",
+  "num_adultos": 2,
+  "num_habitaciones": 1
+}
+
+###
+
+### 5.2 Buscar hoteles vía Turismo (proxy)
+# @name searchHotelProxy
+# NOTA: El adaptador convierte CO-BOG → "Bogotá"
+POST {{baseUrl}}/bookings/hotels/search
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "cityId": "CO-BOG",
+  "checkIn": "2025-12-20",
+  "checkOut": "2025-12-25",
+  "adults": 2,
+  "rooms": 1
+}
+
+###
+
+### 5.3 Crear reserva de habitación (DIRECTO al hotel)
+# @name reserveHotelDirect
+POST {{hotelUrl}}/db/reservas
+Content-Type: application/json
+
+{
+  "id_hotel": "a32ab199-4381-4d33-9c61-590b323e6e92",
+  "codigo_tipo_habitacion": "doble",
+  "fecha_checkin": "2025-12-20",
+  "fecha_checkout": "2025-12-25",
+  "cedula_reserva": "1234567890",
+  "num_habitaciones": "1",
+  "num_adultos": "2"
+}
+
+###
+
+### 5.4 Reservar hotel vía Turismo (proxy)
+# @name reserveHotelProxy
+# NOTA: roomId es el código (ej: "doble"), no UUID
+POST {{baseUrl}}/bookings/hotels/reserve
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "hotelId": "a32ab199-4381-4d33-9c61-590b323e6e92",
+  "roomId": "doble",
+  "clientId": "CC-1234567890",
+  "checkIn": "2025-12-20",
+  "checkOut": "2025-12-25",
+  "reservationId": "{{$guid}}",
+  "rooms": 1,
+  "adults": 2
+}
+
+###
+
+### 5.5 Confirmar reserva hotel (DIRECTO al hotel)
+# NOTA: El hotel espera UUID para id_transaccion
+PUT {{hotelUrl}}/db/reservas/deliberacion
+Content-Type: application/json
+
+{
+  "id_reserva": "{{reserveHotelDirect.response.body.[0].id_reserva}}",
+  "id_transaccion": "{{$guid}}",
+  "estado": "CONFIRMADO"
+}
+
+###
+
+### 5.6 Confirmar hotel vía Turismo (proxy)
+# NOTA: El adaptador convierte transactionId banco a UUID automáticamente
+POST {{baseUrl}}/bookings/hotels/confirm
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "hotelReservationId": "{{reserveHotelProxy.response.body.hotelReservationId}}",
+  "transactionId": "BDB-20251126-HOTEL01"
+}
+
+###
+
+### 5.7 Cancelar reserva hotel (DIRECTO al hotel)
+PUT {{hotelUrl}}/db/reservas/cancelacion
+Content-Type: application/json
+
+{
+  "id_reserva": "{{reserveHotelDirect.response.body.[0].id_reserva}}",
+  "id_transaccion": "{{$guid}}",
+  "cedula_reserva": "1234567890",
+  "origen_solicitud": "CLIENTE",
+  "motivo": "Prueba QA",
+  "observaciones": "Cancelación de prueba"
+}
+
+###
+
+### 5.8 Cancelar hotel vía Turismo (proxy)
+POST {{baseUrl}}/bookings/hotels/cancel
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "confirmedId": "{{reserveHotelProxy.response.body.hotelReservationId}}",
+  "reservationId": "{{$guid}}",
+  "origin": "CLIENTE",
+  "reason": "Cambio de planes",
+  "notes": "Cancelación solicitada por el cliente"
+}
+
+###
+
+### ============================================
+### CASO 6: Carrito de Compras
+### ============================================
+
+### 6.1 Agregar vuelo al carrito
+# @name addToCart
+POST {{baseUrl}}/cart/items
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "clientId": "CC-1032456789",
+  "currency": "COP",
+  "kind": "AIR",
+  "refId": "flight-001",
+  "quantity": 2,
+  "price": 450000,
+  "metadata": {
+    "flightId": "550e8400-e29b-41d4-a716-446655440000",
+    "passengers": [
+      {"name": "Juan Perez", "age": 30, "seat": "12A"},
+      {"name": "Maria Garcia", "age": 28, "seat": "12B"}
+    ]
+  }
+}
+
+###
+
+### 6.2 Agregar hotel al carrito
+POST {{baseUrl}}/cart/items
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "clientId": "CC-1032456789",
+  "currency": "COP",
+  "kind": "HOTEL",
+  "refId": "room-001",
+  "quantity": 1,
+  "price": 350000,
+  "metadata": {
+    "hotelId": "550e8400-e29b-41d4-a716-446655440001",
+    "roomId": "room-standard-01",
+    "checkIn": "2025-12-20",
+    "checkOut": "2025-12-25"
+  }
+}
+
+###
+
+### 6.3 Ver carrito
+GET {{baseUrl}}/cart?clientId=CC-1032456789
+Authorization: Bearer {{token}}
+
+###
+
+### 6.4 Eliminar item del carrito
+DELETE {{baseUrl}}/cart/items/<ITEM_ID>?clientId=CC-1032456789
+Authorization: Bearer {{token}}
+
+###
+
+### 6.5 Vaciar carrito
+DELETE {{baseUrl}}/cart?clientId=CC-1032456789
+Authorization: Bearer {{token}}
+
+###
+
+### ============================================
+### CASO 7: Checkout (Quote y Confirm)
+### ============================================
+
+### 7.1 Obtener cotización (con márgenes aplicados)
+# Margen 10% para hoteles, 5% para vuelos
+POST {{baseUrl}}/checkout/quote
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "clientId": "CC-1032456789"
+}
+
+###
+
+### 7.2 Confirmar checkout (inicia proceso de pago)
+POST {{baseUrl}}/checkout/confirm
+Content-Type: application/json
+Authorization: Bearer {{token}}
+Idempotency-Key: checkout-{{$timestamp}}
+
+{
+  "clientId": "CC-1032456789",
+  "currency": "COP",
+  "cartId": "{{cartId}}",
+  "description": "Reserva de vuelo BOG-MDE y hotel en Cartagena",
+  "returnUrl": "https://turismo.example.com/payments/return",
+  "callbackUrl": "https://turismo.example.com/payments/webhook"
+}
+
+###
+
+### ============================================
+### CASO 8: Pagos
+### ============================================
+
+### 8.1 Iniciar pago (requiere reservationId)
+POST {{baseUrl}}/payments/init
+Content-Type: application/json
+Authorization: Bearer {{token}}
+Idempotency-Key: pay-{{$timestamp}}
+
+{
+  "reservationId": "<RESERVATION_UUID>",
+  "clientId": "CC-1032456789",
+  "totalAmount": 945000,
+  "currency": "COP",
+  "description": "Pago reserva vuelo y hotel",
+  "returnUrl": "https://turismo.example.com/payments/return",
+  "callbackUrl": "https://turismo.example.com/payments/webhook"
+}
+
+###
+
+### 8.2 Consultar estado de pago
+# Formato TransactionID según gobernanza: <BANCO>-<YYYYMMDD>-<SUFIJO>
+GET {{baseUrl}}/payments/status?transactionId=BDB-20251126-ABC123
+Authorization: Bearer {{token}}
+
+###
+
+### 8.3 Webhook del banco (simulación)
+POST {{baseUrl}}/payments/webhook
+Content-Type: application/json
+
+{
+  "transactionId": "BDB-20251126-ABC123",
+  "paymentAttemptId": "pay-ext-001",
+  "clientId": "CC-1032456789",
+  "totalAmount": 945000,
+  "currency": "COP",
+  "authCode": "AUTH123456",
+  "receiptRef": "https://banco.example.com/receipt/123",
+  "transactionAt": "2025-11-26T18:30:00Z",
+  "signature": "abc123signaturehash",
+  "state": "APROBADA"
+}
+
+###
+
+### ============================================
+### CASO 9: Reservaciones
+### ============================================
+
+### 9.1 Crear reservación manualmente
+POST {{baseUrl}}/reservations
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "clientUuid": "{{clientUuid}}",
+  "currency": "COP",
+  "totalAmount": 945000,
+  "note": "Reserva de prueba"
+}
+
+###
+
+### 9.2 Consultar reservación
+GET {{baseUrl}}/reservations/<RESERVATION_UUID>
+Authorization: Bearer {{token}}
+
+###
+
+### 9.3 Listar reservaciones de un cliente
+GET {{baseUrl}}/reservations?clientUuid={{clientUuid}}
+Authorization: Bearer {{token}}
+
+###
+
+### 9.4 Cancelar reservación
+PATCH {{baseUrl}}/reservations/<RESERVATION_UUID>/cancel
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "reason": "Cliente solicitó cancelación"
+}
+
+###
+
+### ============================================
+### CASO 10: Reportes
+### ============================================
+
+### 10.1 Resumen de ventas
+GET {{baseUrl}}/reporting/sales?startDate=2025-01-01&endDate=2025-12-31
+
+###
+
+### 10.2 Resumen de reservaciones
+GET {{baseUrl}}/reporting/reservations
+
+###
+
+### ============================================
+### CASO 11: Banco PSE (Directo)
+### ============================================
+
+### 11.1 Crear pago en banco
+# Nota: El banco dockerizado tiene endpoints diferentes
+POST {{bankUrl}}/api/pagos/crear
+Content-Type: application/json
+
+{
+  "monto_total": 900000,
+  "descripcion_pago": "Reserva vuelo BOG-MDE",
+  "cedula_cliente": "CC-1032456789",
+  "nombre_cliente": "Juan Perez",
+  "url_respuesta": "https://turismo.example.com/bank/response",
+  "url_notificacion": "https://turismo.example.com/v1/payments/webhook",
+  "destinatario": "Agencia de Viajes"
+}
+
+###
+
+### ============================================
+### VALIDACIONES DE GOBERNANZA
+### ============================================
+
+### Validar formato ClientID incorrecto (debería fallar)
+POST {{baseUrl}}/clients
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "clientId": "12345",
+  "name": "Test Invalido"
+}
+
+###
+
+### Validar formato CityID incorrecto (debería fallar)
+POST {{baseUrl}}/bookings/air/search
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "originCityId": "BOGOTA",
+  "destinationCityId": "MEDELLIN",
+  "passengers": 1,
+  "cabin": "ECONOMICA"
+}
+
+###
+
+### Validar formato moneda incorrecto (debería fallar)
+POST {{baseUrl}}/cart/items
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "clientId": "CC-1032456789",
+  "currency": "PESO",
+  "kind": "AIR",
+  "refId": "test",
+  "quantity": 1,
+  "price": 100
+}
+
+###
+
