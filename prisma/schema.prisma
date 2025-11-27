@@ -259,3 +259,18 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 }
+
+// ============================================
+// CATÁLOGO DE CIUDADES (Gobernanza de Datos)
+// CityID: basado en ISO 3166-2 (ej.: CO-BOG)
+// ============================================
+
+/// Ciudades con código IATA para Hotel y Aerolínea
+model CityAlias {
+  id        String   @id            // CO-BOG (formato gobernanza CityID)
+  name      String                  // Bogotá
+  iataCode  String?                 // BOG (para aerolínea)
+  createdAt DateTime @default(now())
+  
+  @@index([iataCode])
+}

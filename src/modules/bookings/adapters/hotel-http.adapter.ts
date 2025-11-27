@@ -13,24 +13,8 @@ import {
 import {
   HotelCancelRequestDto, HotelCancelResponseDto,
 } from '../dtos/hotel-cancel.dto';
-
-/**
- * Mapeo de CityID ISO 3166-2 a nombres de ciudad para el hotel
- */
-const CITY_MAP: Record<string, string> = {
-  'CO-BOG': 'Bogotá',
-  'CO-MDE': 'Medellín',
-  'CO-CLO': 'Cali',
-  'CO-CTG': 'Cartagena',
-  'CO-BAQ': 'Barranquilla',
-  'CO-SMR': 'Santa Marta',
-  'CO-PEI': 'Pereira',
-  'CO-BGA': 'Bucaramanga',
-};
-
-const cityIdToName = (cityId: string): string => {
-  return CITY_MAP[cityId] || cityId.split('-')[1] || cityId;
-};
+import { cityIdToName } from '../../catalog/city-utils';
+import { setupAxiosLogger } from '../../../common/utils/axios-logger';
 
 export class HotelHttpAdapter implements HotelPort {
   private http: AxiosInstance;
@@ -42,6 +26,9 @@ export class HotelHttpAdapter implements HotelPort {
       timeout: this.cfg.timeoutMs,
       headers: { 'x-api-key': this.cfg.apiKey },
     });
+    
+    // Add debug logging for all requests/responses
+    setupAxiosLogger(this.http, 'HOTEL');
   }
 
   /**

@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, NestModule, MiddlewareConsumer } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
 import { AppController } from './app.controller';
@@ -18,6 +18,7 @@ import { CheckoutModule } from './modules/checkout/checkout.module';
 import { CartModule } from './modules/cart/cart.module';
 import { ReportingModule } from './modules/reporting/reporting.module';
 import { OutboxProcessor } from './modules/common/workers/outbox.processor';
+import { RequestLoggerMiddleware } from './common/middleware/request-logger.middleware';
 
 @Module({
   imports: [
@@ -46,4 +47,10 @@ import { OutboxProcessor } from './modules/common/workers/outbox.processor';
   controllers: [AppController],
   providers: [AppService, OutboxProcessor],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer
+      .apply(RequestLoggerMiddleware)
+      .forRoutes('*');
+  }
+}

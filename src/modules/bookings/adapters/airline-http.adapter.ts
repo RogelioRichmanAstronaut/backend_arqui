@@ -13,35 +13,13 @@ import {
 import {
   AirlineCancelRequestDto, AirlineCancelResponseDto,
 } from '../dtos/airline-cancel.dto';
-
-/**
- * Extrae el código IATA de un CityID ISO 3166-2
- * Ej: "CO-BOG" → "BOG", "CO-MDE" → "MDE"
- * Si ya es IATA (sin guión), lo devuelve tal cual
- */
-const extractIATA = (cityId: string): string => {
-  if (!cityId) return cityId;
-  const parts = cityId.split('-');
-  // Si tiene formato ISO 3166-2 (CO-BOG), devolver la segunda parte
-  return parts.length > 1 ? parts[1] : cityId;
-};
-
-/**
- * Convierte código IATA a CityID ISO 3166-2 (asumiendo Colombia)
- * Ej: "BOG" → "CO-BOG", "MDE" → "CO-MDE"
- * Si ya tiene formato ISO 3166-2, lo devuelve tal cual
- */
-const toISO3166 = (iataCode: string, countryCode = 'CO'): string => {
-  if (!iataCode) return iataCode;
-  // Si ya tiene guión, asumir que es ISO 3166-2
-  if (iataCode.includes('-')) return iataCode;
-  return `${countryCode}-${iataCode}`;
-};
+import { cityIdToIata, iataToCityId } from '../../catalog/city-utils';
+import { setupAxiosLogger } from '../../../common/utils/axios-logger';
 
 /**
  * Adapter HTTP para el servicio de Aerolínea
  * 
- * Endpoints reales (localhost:8080):
+ * Endpoints reales (IP: 10.43.103.34:8080):
  * - POST /v1/vuelos/buscar
  * - POST /v1/vuelos/reservar
  * - PUT  /v1/vuelos/reservas/{reservaVueloId}/confirmar
@@ -60,6 +38,9 @@ export class AirlineHttpAdapter implements AirlinePort {
       timeout: this.cfg.timeoutMs,
       headers: { 'x-api-key': this.cfg.apiKey },
     });
+    
+    // Add debug logging for all requests/responses
+    setupAxiosLogger(this.http, 'AIRLINE');
   }
 
   /**
@@ -70,8 +51,8 @@ export class AirlineHttpAdapter implements AirlinePort {
    */
   async search(req: AirlineSearchRequestDto): Promise<AirlineSearchResponseDto> {
     const { data } = await this.http.post('/v1/vuelos/buscar', {
-      origen: extractIATA(req.originCityId),
-      destino: extractIATA(req.destinationCityId),
+      origen: cityIdToIata(req.originCityId),
+      destino: cityIdToIata(req.destinationCityId),
       fechaSalida: req.departureAt ?? null,
       fechaRegreso: req.returnAt ?? null,
       numPasajeros: req.passengers,
@@ -82,9 +63,9 @@ export class AirlineHttpAdapter implements AirlinePort {
       flights: (data?.vuelos ?? []).map((v: any) => ({
         flightId: v?.vueloId ?? v?.Flight_id ?? v?.id,
         airline: v?.aerolinea,
-        // Convertir códigos IATA a ISO 3166-2 para consistencia en Turismo
-        originCityId: toISO3166(v?.origen),
-        destinationCityId: toISO3166(v?.destino),
+        // Convertir códigos IATA a CityID ISO 3166-2 para consistencia en Turismo
+        originCityId: iataToCityId(v?.origen),
+        destinationCityId: iataToCityId(v?.destino),
         departsAt: v?.fechaSalida ?? v?.fecha_salida,
         arrivesAt: v?.fechaLlegada ?? v?.fecha_llegada,
         duration: v?.duracion,

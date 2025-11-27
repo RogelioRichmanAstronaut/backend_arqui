@@ -1,35 +1,70 @@
+/**
+ * CatalogService - Servicio de catálogo de ciudades
+ * 
+ * Lee las ciudades desde la base de datos (CityAlias) a través de CityMapperService.
+ * Mantiene compatibilidad con la entidad CityEntity para el resto del sistema.
+ * 
+ * Referencia: Documento de Gobernanza de Datos
+ * - Cities — Owner: Estandar; SoR: Catálogo de destinos
+ */
+
 import { Injectable } from '@nestjs/common';
 import { CityEntity } from './entities/city.entity';
+import { CityMapperService } from './city-mapper.service';
 
 @Injectable()
 export class CatalogService {
-  // Fuente de verdad en memoria (simulando DB maestra)
-  private readonly cities: CityEntity[] = [
-    new CityEntity('CO-BOG', 'Bogotá', 'Colombia'),
-    new CityEntity('CO-MDE', 'Medellín', 'Colombia'),
-    new CityEntity('CO-CTG', 'Cartagena', 'Colombia'),
-    new CityEntity('CO-CLO', 'Cali', 'Colombia'),
-    new CityEntity('US-MIA', 'Miami', 'USA'),
-    new CityEntity('US-NYC', 'New York', 'USA'),
-    new CityEntity('US-LAX', 'Los Angeles', 'USA'),
-    new CityEntity('ES-MAD', 'Madrid', 'España'),
-    new CityEntity('ES-BCN', 'Barcelona', 'España'),
-    new CityEntity('MX-MEX', 'Ciudad de México', 'México'),
-    new CityEntity('MX-CUN', 'Cancún', 'México'),
-    new CityEntity('BR-SAO', 'São Paulo', 'Brasil'),
-    new CityEntity('BR-RIO', 'Rio de Janeiro', 'Brasil'),
-  ];
+  constructor(private readonly cityMapper: CityMapperService) {}
 
+  /**
+   * Obtiene todas las ciudades del catálogo
+   */
   findAllCities(): CityEntity[] {
-    return this.cities;
+    const cities = this.cityMapper.getAllCities();
+    return cities.map(c => new CityEntity(
+      c.id,
+      c.name,
+      this.extractCountryFromId(c.id),
+    ));
   }
 
+  /**
+   * Valida si un CityID existe en el catálogo
+   */
   validateCityId(cityId: string): boolean {
-    return this.cities.some((c) => c.id === cityId);
+    return this.cityMapper.isValidCityId(cityId);
   }
 
+  /**
+   * Busca una ciudad por su ID
+   */
   findCityById(cityId: string): CityEntity | undefined {
-    return this.cities.find((c) => c.id === cityId);
+    const city = this.cityMapper.getCityById(cityId);
+    if (!city) return undefined;
+    
+    return new CityEntity(
+      city.id,
+      city.name,
+      this.extractCountryFromId(city.id),
+    );
+  }
+
+  /**
+   * Extrae el país del CityID (CO-BOG -> Colombia)
+   */
+  private extractCountryFromId(cityId: string): string {
+    const countryCode = cityId.split('-')[0];
+    const countryNames: Record<string, string> = {
+      'CO': 'Colombia',
+      'US': 'USA',
+      'ES': 'España',
+      'MX': 'México',
+      'BR': 'Brasil',
+      'AR': 'Argentina',
+      'PE': 'Perú',
+      'CL': 'Chile',
+      'PA': 'Panamá',
+    };
+    return countryNames[countryCode] || countryCode;
   }
 }
-

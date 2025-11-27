@@ -247,7 +247,10 @@ case "$CMD" in
     npx prisma generate
     npx prisma migrate deploy
 
-    echo "--- 4c. Compilar la aplicación (using 'npx nest build' via package.json) ---"
+    echo "--- 4c. Cargar catálogo ISO 3166 + ciudades (seeds) ---"
+    npx prisma db seed || echo "⚠️ Seeds ya ejecutados o error en seed (continuando...)"
+
+    echo "--- 4d. Compilar la aplicación (using 'npx nest build' via package.json) ---"
     npm run build
 
     if [ $? -ne 0 ]; then
@@ -255,7 +258,7 @@ case "$CMD" in
         exit 1
     fi
     
-    echo "--- 4d. Optimizar dependencias para producción (solo runtime) ---"
+    echo "--- 4e. Optimizar dependencias para producción (solo runtime) ---"
     npm ci --only=production
     
     echo "--- 5. Crear configuración PM2 (Ecosystem) ---"

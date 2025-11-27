@@ -1,0 +1,21 @@
+CREATE TABLE `country` (
+	`id` INT(10) UNSIGNED NOT NULL,
+	`name` VARCHAR(50) NOT NULL,
+	`alt_names` VARCHAR(255) NULL DEFAULT NULL,
+	`code2` CHAR(2) NOT NULL,
+	`code3` CHAR(3) NOT NULL,
+	PRIMARY KEY (`id`)
+)
+COLLATE='utf8_general_ci'
+ENGINE=InnoDB;
+
+CREATE TABLE `region` (
+	`id` VARCHAR(6) NOT NULL,
+	`country_id` INT(10) UNSIGNED NOT NULL,
+	`name` VARCHAR(50) NOT NULL,
+	`alt_names` VARCHAR(255) NULL DEFAULT NULL,
+	`level` VARCHAR(50) NULL DEFAULT NULL,
+	PRIMARY KEY (`id`)
+)
+COLLATE='utf8_general_ci'
+ENGINE=InnoDB;

@@ -7,6 +7,7 @@ import {
   RefundParams, RefundResult,
   ValidateReceiptParams, ValidateReceiptResult
 } from '../ports/bank.port';
+import { setupAxiosLogger } from '../../../common/utils/axios-logger';
 
 export class BankHttpAdapter implements BankPort {
   private http: AxiosInstance;
@@ -18,6 +19,9 @@ export class BankHttpAdapter implements BankPort {
       timeout: this.cfg.timeoutMs,
       headers: { 'x-api-key': this.cfg.apiKey },
     });
+    
+    // Add debug logging for all requests/responses
+    setupAxiosLogger(this.http, 'BANK');
   }
 
   async initiatePayment(p: InitiatePaymentParams): Promise<InitiatePaymentResult> {
