@@ -7,6 +7,7 @@ export class MarginsController {
 
   @Get('rates')
   getRates() {
+    console.debug('Get margins rates attempt');
     return {
       hotel: this.service.getMarginPercentage('HOTEL'),
       air: this.service.getMarginPercentage('AIR'),

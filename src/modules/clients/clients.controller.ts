@@ -11,21 +11,25 @@ export class ClientsController {
 
   @Post()
   create(@Body() dto: CreateClientDto) {
+    console.debug('Create client attempt with DTO:', dto);
     return this.service.create(dto);
   }
 
   @Get(':id')
   get(@Param('id') id: string) {
+    console.debug('Get client attempt for id:', id);
     return this.service.findById(id);
   }
 
   @Patch(':id')
   update(@Param('id') id: string, @Body() dto: UpdateClientDto) {
+    console.debug('Update client attempt for id:', id, 'with DTO:', dto);
     return this.service.update(id, dto);
   }
 
   @Delete(':id')
   remove(@Param('id') id: string) {
+    console.debug('Soft delete client attempt for id:', id);
     return this.service.softDelete(id);
   }
 }

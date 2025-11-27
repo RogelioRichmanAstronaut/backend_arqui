@@ -7,6 +7,7 @@ export class NotificationsController {
 
   @Get('health')
   health() {
+    console.debug('Notifications service health check attempt');
     return { status: 'ok', service: 'notifications' };
   }
 }

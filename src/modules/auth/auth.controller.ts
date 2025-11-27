@@ -9,11 +9,13 @@ export class AuthController {
 
   @Post('register')
   register(@Body() dto: RegisterDto) {
+    console.debug('Registration attempt with DTO:', dto);
     return this.authService.register(dto);
   }
 
   @Post('login')
   login(@Body() dto: LoginDto) {
+    console.debug('Login attempt with DTO:', dto);
     return this.authService.login(dto);
   }
 }

@@ -7,6 +7,7 @@ export class CatalogController {
 
   @Get('cities')
   getCities() {
+    console.debug('Get cities attempt');
     return this.service.findAllCities();
   }
 }

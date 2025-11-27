@@ -9,6 +9,7 @@ export class HealthController {
 
   @Get('ready')
   ready() {
+    console.debug('Readiness check attempt');
     // Aquí puedes añadir verificaciones de DB/Redis/etc en pasos posteriores
     return { status: 'ready', ts: new Date().toISOString() };
   }

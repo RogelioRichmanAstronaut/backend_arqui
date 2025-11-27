@@ -11,6 +11,7 @@ export class CheckoutController {
 
   @Post('quote')
   quote(@Body() dto: CheckoutQuoteRequestDto): Promise<CheckoutQuoteResponseDto> {
+    console.debug('Checkout quote attempt with DTO:', dto);
     return this.service.quote(dto);
   }
 
@@ -19,6 +20,7 @@ export class CheckoutController {
     @Body() dto: CheckoutConfirmRequestDto,
     @Headers('Idempotency-Key') idemKey?: string,
   ): Promise<CheckoutConfirmResponseDto> {
+    console.debug('Checkout confirm attempt with DTO:', dto, 'and Idempotency-Key:', idemKey);
     return this.service.confirm(dto, idemKey);
   }
 }

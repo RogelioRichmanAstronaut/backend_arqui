@@ -22,42 +22,50 @@ export class BookingsController {
   // AIR
   @Post('air/search')
   airSearch(@Body() dto: AirlineSearchRequestDto): Promise<AirlineSearchResponseDto> {
+    console.debug('Airline search attempt with DTO:', dto);
     return this.service.airSearch(dto);
   }
 
   @Post('air/reserve')
   airReserve(@Body() dto: AirlineReserveRequestDto): Promise<AirlineReserveResponseDto> {
+    console.debug('Airline reserve attempt with DTO:', dto);
     return this.service.airReserve(dto);
   }
 
   @Post('air/confirm')
   airConfirm(@Body() dto: AirlineConfirmRequestDto): Promise<AirlineConfirmResponseDto> {
+    console.debug('Airline confirm attempt with DTO:', dto);
     return this.service.airConfirm(dto);
   }
 
   @Post('air/cancel')
   airCancel(@Body() dto: AirlineCancelRequestDto): Promise<AirlineCancelResponseDto> {
+    console.debug('Airline cancel attempt with DTO:', dto);
     return this.service.airCancel(dto);
   }
 
   // HOTELS
   @Post('hotels/search')
   hotelsSearch(@Body() dto: HotelSearchRequestDto): Promise<HotelSearchResponseDto> {
+    console.debug('Hotel search attempt with DTO:', dto);
     return this.service.hotelsSearch(dto);
   }
 
   @Post('hotels/reserve')
   hotelsReserve(@Body() dto: HotelReserveRequestDto): Promise<HotelReserveResponseDto> {
+    console.debug('Hotel reserve attempt with DTO:', dto);
     return this.service.hotelsReserve(dto);
   }
 
   @Post('hotels/confirm')
   hotelsConfirm(@Body() dto: HotelConfirmRequestDto): Promise<HotelConfirmResponseDto> {
+    console.debug('Hotel confirm attempt with DTO:', dto);
     return this.service.hotelsConfirm(dto);
   }
 
   @Post('hotels/cancel')
   hotelsCancel(@Body() dto: HotelCancelRequestDto): Promise<HotelCancelResponseDto> {
+    console.debug('Hotel cancel attempt with DTO:', dto);
     return this.service.hotelsCancel(dto);
   }
 }
