@@ -1,0 +1,1507 @@
+Tentativa de integraciones de Servicios Externos
+Convenciones generales
+●
+Protocolo: REST/HTTPS.
+●
+Formato de intercambio: JSON.
+●
+Versionado: Prefijo /v1; versiones futuras usarán /v2.
+Servicio Banco
+Redirección al Banco para realizar un pago
+●
+Request
+Campo Descripción Tipo de Dato Obligatorio
+monto
+_
+total Valor de la transacción a pagar. Numérico Sí
+descripcion
+_pago Descripción breve del producto o
+servicio (p. ej.,
+"Reserva Vuelo y
+Hotel #1234").
+Texto Sí
+cedula
+_
+cliente Cédula del cliente para el recibo y
+trazabilidad de las transacciones.
+Numérico Sí
+nombre
+_
+cliente Nombre del cliente que compra el
+paquete turistico
+Texto Sí
+url
+_
+respuesta URL de la página de Turismo donde
+se debe redirigir al cliente después del
+pago (independiente del resultado).
+URL Sí
+url
+_
+notificacion URL de la página de Turismo que
+recibirá la notificación de servidor a
+servidor (Webhook) con el resultado
+final (El banco llama a esta URL).
+URL Sí
+destinatario Número de cuenta bancaria de la
+agencia de turismo
+Numérico Sí
+Response (Respuesta del Banco a Turismo)
+●
+Respuesta con url de redirección al banco
+Campo Descripción Tipo de Dato Obligatorio
+referencia
+_
+transaccion ID único de la orden en el sistema de
+Banco con el cual se creó la transacción
+Alfanumérico Sí
+url
+_
+banco URL de la página de Banco para que el
+usuario pueda ingresar al Banco.
+URL Sí
+●
+Respuesta por redirección del Cliente (url_respuesta)
+Campo Descripción Tipo de Dato Obligatorio
+referencia
+_
+transaccion La misma ID enviada en el Request. Alfanumérico Sí
+estado
+_
+transaccion 'APROBADA'
+,
+'RECHAZADA'
+,
+'PENDIENTE'
+,
+'FALLIDA'
+.q
+Alfanumérico Sí
+codigo
+_
+autorizacion Código numérico que confirma la
+aprobación del pago.
+Numérico Si Aprobada
+Respuesta por Notificación de Servidor a Servidor (url_notificacion)
+Campo Descripción Tipo de Dato Obligatorio
+referencia
+_
+transaccion La misma ID enviada en el Request. Alfanumérico Sí
+estado
+_
+transaccion 'APROBADA'
+,
+'RECHAZADA'
+,
+'REEMBOLSADA'
+.
+Alfanumérico Sí
+monto
+_
+transaccion El monto final que fue procesado. Numérico Sí
+fecha
+_
+hora
+_pago Estampa de tiempo del momento exacto
+del pago.
+Fecha/Hora Sí
+codigo
+_
+respuesta Código numérico detallado del resultado
+(p. ej., 00 = Aprobada, 51 = Fondos
+insuficientes).
+Numérico Sí
+metodo
+_pago Tipo de tarjeta usada (VISA, Mastercard,
+AMEX).
+Alfanumérico Sí
+Diagrama de secuencia
+Código Descripción
+200 OK - Pago realizado correctamente
+400 INV ALID
+_
+PARAMETERS - Parámetros inválidos
+o faltantes
+401 UNAUTHORIZED - Token inválido o expirado
+404 NOT
+_
+FOUND - No se encontró la transacción
+para la referencia
+_
+transaccion indicada.
+500 INTERNAL
+_
+ERROR - Error interno del servidor
+Solicitud de Reembolso
+●
+Request
+Campo Descripción Tipo de Dato Obligatorio
+id
+_
+transaccion
+_
+original El ID único que el banco/pasarela asignó
+a la transacción de pago original (el que
+se recibió en el Response de la venta).
+Alfanumérico Sí
+referencia
+_
+reembolso ID único de la orden o nota de crédito en
+el sistema de Turismo para rastrear este
+reembolso específico.
+Alfanumérico Sí
+monto
+_
+a
+_
+reembolsar El valor exacto que se desea devolver al
+cliente. Puede ser parcial o total.
+Numérico Sí
+razon
+_
+reembolso Breve descripción del motivo (p. ej.,
+"Cancelación de reserva"
+,
+"Compensación por servicio").
+Texto Opcional
+●
+Response
+Campo Descripción Tipo de Dato Obligatorio
+referencia
+_
+reembolso La misma ID enviada por Turismo en el
+Request.
+Alfanumérico Sí
+id
+_
+reembolso
+_
+banco ID único asignado por el Banco a esta
+operación de reembolso.
+Alfanumérico Sí
+estado
+_
+solicitud 'ACEPTADA'
+,
+'RECHAZADA'
+,
+'ERROR'
+.
+Indica que el Banco recibió y aceptó la
+solicitud, no que el dinero ya se haya
+devuelto.
+Alfanumérico Sí
+monto
+_procesado El monto que el banco ha tomado para su
+proceso de devolución.
+Numérico Sí
+codigo
+_
+respuesta Código numérico detallado del resultado (p.
+ej., 00 = Solicitud aceptada, 55 =
+Transacción original no encontrada).
+Numérico Sí
+mensaje
+_
+respuesta Mensaje legible por humanos (p. ej.,
+"Solicitud de reembolso aceptada").
+Texto Sí
+Diagrama de secuencia
+Código Descripción
+200 OK - Rembolso realizado correctamente
+400 INV ALID
+_
+PARAMETERS - Parámetros inválidos
+o faltantes
+401 UNAUTHORIZED - Token inválido o expirado
+404 NOT
+_
+FOUND - No se encontró la transacción
+original.
+500 INTERNAL
+_
+ERROR - Error interno del servidor
+JSON
+●
+Solicitar pago (Solución de turismo a Banco)
+{
+"monto
+_
+total": 1500000,
+"descripcion
+_pago": "Reserva paquete Caribe #ABC123"
+,
+"cedula
+_
+cliente": "1020304050"
+,
+"nombre
+_
+cliente": "María Pérez"
+,
+"url
+_
+respuesta": "https://turismo.com/pagos/respuesta"
+,
+"url
+_
+notificacion": "https://turismo.com/pagos/notificacion"
+,
+"destinatario": "1234567890"
+}
+●
+Creación de transacción (Banco a solución de turismo)
+{
+"referencia
+_
+transaccion": "BANK-20251120-0001"
+,
+"url
+_
+banco": "https://banco.com/pagos/form?ref=BANK-20251120-0001"
+}
+●
+Respuesta transacción (Banco a solución de turismo)
+{
+"referencia
+_
+transaccion": "BANK-20251120-0001"
+,
+"estado
+_
+transaccion": "APROBADA"
+,
+"monto
+_
+transaccion": 1500000,
+"fecha
+_
+hora
+_pago": "2025-11-20T13:45:30Z"
+,
+"codigo
+_
+respuesta": "00"
+,
+"metodo
+_pago": "CUENTA
+_
+BANCARIA"
+}
+Servicio hotelero
+Búsqueda de hoteles
+●
+Request
+Campo Descripción Tipo de Dato Obligatorio
+ciudad
+_
+destino Ciudad o código del destino (p. ej.,
+“Bogotá”
+,
+“BOG”).
+Texto No
+fecha
+_
+checkin Fecha de entrada (YYYY-MM-DD). Fecha Sí
+fecha
+_
+checkout Fecha de salida(YYYY-MM-DD). Fecha Sí
+num
+_
+adultos Número total de adultos. Numérico Sí
+num
+_
+habitaciones Número de habitaciones requeridas. Numérico Sí
+●
+Response (Respuesta del Hotel a Turismo)
+Campo Descripción Tipo de Dato Obligatorio
+consulta
+_
+id Identificador de consulta. Alfanumérico Sí
+hoteles Listado de resultados Lista<Hotel> Sí
+○
+Estructura del objeto Hotel
+Campo Descripción Tipo de Dato Obligatorio
+hotel
+_
+id Identificador único del hotel. Alfanumérico Sí
+nombre Nombre comercial del hotel Texto Sí
+categoria
+_
+estrellas Categoría del hotel en estrellas (1 a 5) Numérico Sí
+ciudad Ciudad del hotel Texto Si
+direccion Dirección exacta del hotel Texto Sí
+habitaciones Se envían las habitaciones disponibles
+dentro del hotel, con la capacidad de
+cada una y el precio.
+Lista<Habitacio
+n>
+Sí
+servicios
+_
+hotel Servicios generales del hotel (wifi,
+desayuno, piscina, gimnasio, restaurante,
+etc.).
+Lista<Texto> No
+fotos URLs de imágenes del hotel. Lista<Texto> Sí
+○
+Estructura del objeto Habitación
+Campo Descripción Tipo de Dato Obligatorio
+habitacion
+_
+id Identificador único de la habitación. Alfanumérico Sí
+tipo Tipo de habitacion Texto Sí
+disponibilidad Tipos de disponibilidad: estado: (“NO
+DISPONIBLE”
+,
+“DISPONIBLE”)
+Numérico Sí
+codigo
+_
+tipo
+_
+habitacion Identificador del tipo de habitación Texto Si
+precio Precio del tipo de habitación Númerico Sí
+servicios
+_
+habitacion Servicios generales de la habitación(wifi,
+aire acondicionado, nevera, secador,
+etc.).
+Lista<Texto> No
+Diagrama de secuencia
+JSON
+●
+Request
+{
+"ciudad
+_
+destino": "Bogotá"
+,
+"fecha
+_
+checkin": "2025-11-15"
+,
+"fecha
+_
+checkout": "2025-11-20"
+,
+"num
+_
+adultos": 2,
+"num
+_
+habitaciones": 1
+}
+●
+Response
+{
+"consulta
+_
+id": "CONS-789456"
+,
+"hoteles": [
+{
+"hotel
+_
+id": "HOT-001"
+,
+"nombre": "Hotel Andes Plaza"
+,
+"categoria
+_
+estrellas": 4,
+"ciudad": "Bogotá"
+,
+"direccion": "Av. 15 #100-11"
+,
+"servicios
+_
+hotel": ["wifi"
+,
+"desayuno incluido"
+,
+"gimnasio"
+,
+"restaurante"],
+"fotos": [
+"https://example.com/hotel
+_
+andes
+_
+1.jpg"
+,
+"https://example.com/hotel
+_
+andes
+_
+2.jpg"
+],
+"habitaciones": [
+{
+"habitacion
+_
+id": "HAB-001"
+,
+"tipo": "Doble Estándar"
+,
+"disponibilidad": "DISPONIBLE"
+,
+"codigo
+_
+tipo
+_
+habitacion": "DBL-STD"
+,
+"precio": 320000,
+"servicios
+_
+habitacion": ["wifi"
+,
+"tv"
+,
+"aire
+acondicionado"]
+},
+{
+"habitacion
+_
+id": "HAB-002"
+,
+"tipo": "Suite Ejecutiva"
+,
+"disponibilidad": "DISPONIBLE"
+,
+"codigo
+_
+tipo
+_
+habitacion": "STE-EJEC"
+,
+"precio": 580000,
+"servicios
+_
+habitacion": ["wifi"
+,
+"tv"
+,
+"jacuzzi"
+,
+"minibar"]
+}
+]
+},
+{
+"hotel
+_
+id": "HOT-002"
+,
+"nombre": "Hotel Tequendama"
+,
+"categoria
+_
+estrellas": 5,
+"ciudad": "Bogotá"
+,
+"direccion": "Carrera 10 #26-21"
+,
+"servicios
+_
+hotel": ["wifi"
+,
+"spa"
+,
+"piscina"
+,
+"restaurante gourmet"],
+"fotos": [
+"https://example.com/tequendama
+_
+1.jpg"
+,
+"https://example.com/tequendama
+_
+2.jpg"
+],
+"habitaciones": [
+{
+"habitacion
+_
+id": "HAB-010"
+,
+"tipo": "Suite Presidencial"
+,
+"disponibilidad": "NO DISPONIBLE"
+,
+"codigo
+_
+tipo
+_
+habitacion": "STE-PRES"
+,
+"precio": 1200000,
+"servicios
+_
+habitacion": ["wifi"
+,
+"tv"
+,
+"jacuzzi"
+,
+"vista panorámica"]
+}
+]
+}
+]
+}
+Reserva de hotel
+●
+Request
+Campo Descripción Tipo de Dato Obligatorio
+id
+_
+hotel Identificador del hotel seleccionado. Alfanumérico Sí
+codigo
+_
+tipo
+_
+habitacion Tipo de habitación elegido. Alfanumérico Sí
+fecha
+_
+checkin YYYY-MM-DD. Fecha Sí
+fecha
+_
+checkout YYYY-MM-DD. Fecha Sí
+cedula
+_
+reserva Cédula del encargado de hacer la reserva Texto Sí
+num
+_
+habitaciones Cantidad de habitaciones a reservar. Numérico Sí
+num
+_
+adultos Número total de adultos. Numérico Sí
+●
+Response
+Campo Descripción Tipo de Dato Obligatorio
+id
+_
+reserva Identificador de la pre-reserva/bloqueo. Alfanumérico Sí
+precio
+_
+total Total confirmado para la pre-reserva. Numérico Sí
+estado Valor fijo: ‘PENDIENTE’
+. Texto Sí
+observaciones Notas adicionales del hotel. Texto No
+Diagrama de secuencia
+JSON:
+●
+Request
+{
+"id
+_
+hotel": "HOT123"
+,
+"codigo
+_
+tipo
+_
+habitacion": "STD-DBL"
+,
+"fecha
+_
+checkin": "2025-11-15"
+,
+"fecha
+_
+checkout": "2025-11-20"
+,
+"cedula
+_
+reserva": "1020304050"
+,
+"num
+_
+habitaciones": 1
+}
+●
+Response
+{
+"id
+_
+reserva
+_provisional": "PRE123456"
+,
+"precio
+_
+total": 1500000,
+"estado
+_
+inicial": "PENDIENTE"
+,
+"observaciones": "Tarifa válida por 24 horas"
+}
+Confirmación o liberación de reserva provisional
+●
+Request
+Campo Descripción Tipo de Dato Obligatorio
+id
+_
+reserva Devuelto por el hotel en la pre reserva. Alfanumérico Sí
+id
+_
+transaccion Identificador de la transacción del banco
+aprobada
+Alfanumérico Sí
+estado Indicador de si el pago fue procesado o no
+y si se deben liberar los cupos o no
+(estado: “CONFIRMADO”
+,
+“DENEGADO”)
+Texto Sí
+●
+Response
+Campo Descripción Tipo de Dato Obligatorio
+id
+_
+reserva
+_
+Devuelto por el hotel en la prereserva. Alfanumérico Sí
+estado ‘CONFIRMADA’ o ‘RECHAZADA’
+. Texto Sí
+Diagrama de secuencia
+JSON
+●
+Request
+{
+"id
+_
+reserva
+_provisional": "PRE123456"
+,
+"id
+_
+transaccion": "TXN7890"
+,
+"fecha
+_
+checkout": "2025-11-20"
+}
+●
+Response
+{
+"id
+_
+reserva": "PRE123456"
+,
+"estado
+_
+final": "CONFIRMADA"
+,
+}
+Solicitud de cancelación de reserva
+●
+Request
+Campo Descripción Tipo de Dato Obligatorio
+id
+_
+reserva Identificador de la reserva previamente
+confirmada que se desea reembolsar.
+Alfanumérico Sí
+id
+_
+transaccion Identificador de la transacción asociada al
+pago.
+Alfanumérico Sí
+cedula
+_
+reserva Cédula del encargado que realizó la
+reserva.
+Texto Sí
+origen
+_
+solicitud Quién solicita/cancela: CLIENTE | HOTEL Texto/Enum Si
+motivo Motivo del reembolso (p. ej.,
+“Cancelación”
+,
+“Error en cobro”
+,
+“No
+show”).
+Texto Sí
+observaciones Comentarios o detalles adicionales de la
+solicitud.
+Texto No
+●
+Response
+Campo Descripción Tipo de Dato Obligatorio
+id
+_
+solicitud
+_
+cancelacion Identificador de la solicitud de
+cancelación.
+Alfanumérico Sí
+estado Estado (PENDIENTE, APROBADO,
+RECHAZADO)
+Texto Sí
+fecha
+_
+registro Fecha/hora de registro. FechaHora Sí
+observaciones Comentarios adicionales del hotel sobre el
+resultado (razón de rechazo, detalles, etc.).
+Texto No
+Diagrama de secuencia
+Json:
+●
+Request
+{
+"id
+_
+reserva": "PRE123456"
+,
+"id
+_
+transaccion": "TXN7890"
+,
+"cedula
+_
+reserva": "1020304050"
+,
+"origen
+_
+solicitud": "CLIENTE"
+,
+"monto
+_
+solicitado": 1500000,
+"motivo": "Cancelación por fuerza mayor"
+,
+"observaciones": "Solicitud realizada antes del check-in"
+}
+●
+Response
+{
+"id
+_
+solicitud
+_
+cancelacion": "REF1234"
+,
+"estado
+_
+inicial": "PENDIENTE"
+,
+"fecha
+_
+registro": "2025-11-01T10:30:00Z"
+,
+"observaciones": "En revisión por parte del hotel"
+}
+Gestión de errores
+Código Error Causa Acción del sistema
+400 Parámetros
+inválidos
+Fechas incorrectas,
+cantidades fuera de rango
+Mostrar mensaje y permitir
+corrección
+401 No autorizado Falta de token API Solicitar autenticación
+404 No disponible Hotel o reserva provisional
+no existe
+Nueva búsqueda
+408 Tiempo de espera
+excedido
+La reserva sin confirmar
+venció
+Regresar al paso de selección
+409 Conflicto Cambio en disponibilidad /
+tarifa
+Solicitar nueva confirmación
+500 Error interno Falla del sistema hotelero Reintentar o contactar soporte
+Servicio aéreo
+Búsqueda de vuelos
+Request
+Campo Descripción Tipo de
+Dato
+Obligatorio
+origen Ciudad o código IATA de origen (p. ej.,
+“Bogotá”
+,
+“BOG”).
+Texto Sí
+destino Ciudad o código IATA de destino (p. ej.,
+“Medellín”
+,
+“MDE”).
+Texto Sí
+fechaSalida Fecha de salida (YYYY-MM-DD). Fecha No
+fechaRegreso Fecha de regreso (YYYY-MM-DD) para ida y vuelta. Fecha No
+numPasajeros Número total de pasajeros. Numérico Sí
+clase Clase de cabina (p. ej.,
+'ECONOMICA'
+,
+'EJECUTIV A').
+Texto Sí
+Response (Respuesta de la Aerolínea a Turismo)
+Campo Descripción Tipo de Dato Obligatorio
+consultaId Identificador de consulta. Alfanumérico Sí
+vuelos Listado de resultados. Lista<Vuelo> Sí
+○
+Estructura del objeto Vuelo
+Códigos de error
+Código Descripción
+400 INV ALID
+_
+PARAMETERS - Parámetros inválidos
+o faltantes
+401 UNAUTHORIZED - Token inválido o expirado
+404 NOT
+_
+FOUND - No se encontraron vuelos para
+los criterios especificados
+500 INTERNAL
+_
+ERROR - Error interno del servidor
+Diagrama de secuencia
+Reserva de vuelo
+Request
+Campo Descripción Tipo de Dato Obligatorio
+vueloId Identificador del vuelo seleccionado. Alfanumérico Sí
+numPasajeros Número total de pasajeros. Numérico Sí
+contactoReserva Nombre del encargado/contacto principal. Texto Sí
+documentoContacto Cédula/documento del encargado de la
+reserva.
+Alfanumérico Sí
+Response (Respuesta de la Aerolínea a Turismo)
+Campo Descripción Tipo de Dato Obligatorio
+reservaVueloId Identificador de la pre-reserva/bloqueo. Alfanumérico Sí
+precioTotal Total de la pre-reserva (todos los pasajeros). Decimal Sí
+estadoInicial Valor fijo: 'PENDIENTE'
+. Texto Sí
+fechaExpiracion Límite de expiración de la pre-reserva. Fecha-Hora Sí
+observaciones Notas adicionales de la aerolínea. Texto No
+Códigos de error
+Código Descripción
+400 INV ALID
+_
+PARAMETERS - Datos de pasajero
+inválidos o incompletos
+401 UNAUTHORIZED - Token inválido
+404 FLIGHT
+_
+NOT
+_
+FOUND - El vuelo especificado
+no existe
+409 NO
+_
+SEATS
+_
+A V AILABLE - No hay asientos
+disponibles para la cantidad de pasajeros
+solicitada
+500 INTERNAL
+_
+ERROR - Error interno del servidor
+Diagrama de secuencia
+Confirmación o cancelación de reserva
+Request (Solución de Turismo a Aerolinea)
+Response
+Campo Descripción Tipo de Dato Obligatorio
+reservaConfirmadaId Identificador único de la reserva
+confirmada (PNR/localizador).
+Alfanumérico Sí
+estadoFinal CONFIRMADA o RECHAZADA. Texto Sí
+precioTotalConfirmado Monto final confirmado por la aerolínea. Decimal Sí
+Códigos de error
+Código Descripción
+Campo Descripción Tipo de Dato Obligatorio
+reservaVueloId Devuelto por la aerolínea en la pre-reserva. Alfanumérico Sí
+transaccionId Identificador de la transacción bancaria
+aprobada.
+Alfanumérico Sí
+precioTotalConfirmado Monto final cobrado/autorizado. Decimal Sí
+estado Indicador de si el pago fue procesado o no
+y si se deben liberar los cupos o no
+(estado: “CONFIRMADO”
+,
+“DENEGADO”)
+Texto Sí
+400 INV ALID
+_
+PAYMENT - Información de pago
+inválida o incompleta
+401 UNAUTHORIZED - Token inválido
+404 RESERV ATION
+_
+NOT
+_
+FOUND - La reserva
+especificada no existe
+409 RESERV ATION
+_
+EXPIRED - La reserva expiró
+(más de 30 minutos desde su creación)
+409 PAYMENT
+_
+MISMATCH - El monto del pago no
+coincide con el total de la reserva
+500 INTERNAL
+_
+ERROR - Error interno del servidor
+Diagrama de secuencia
+Cancelación de reserva
+Request
+Campo Descripción Tipo de Dato Obligatorio
+id
+_
+reserva Identificador de la reserva previamente
+confirmada que se desea cancelar.
+Alfanumérico Sí
+id
+_
+transaccion Identificador de la transacción asociada al
+pago.
+Alfanumérico Sí
+cedula
+_
+reserva Cédula del encargado que realizó la
+reserva.
+Texto Sí
+origen
+_
+solicitud Quién solicita/cancela: CLIENTE |
+TURISMO
+Texto/Enum Si
+motivo Motivo del cancelación (p. ej.,
+“reembolso”
+,
+“Error en cobro”
+,
+“No
+show”).
+Texto Sí
+observaciones Comentarios o detalles adicionales de la
+solicitud.
+Texto No
+Response (Respuesta de la Aerolínea a Turismo)
+Campo Descripción Tipo de Dato Obligatorio
+estado Resultado (SUCCESS o ERROR). Texto Sí
+mensaje Mensaje informativo del proceso. Texto No
+reservaConfirmadaId Identificador afectado. Alfanumérico Sí
+fechaCancelacion Fecha y hora efectivas de la cancelación. Fecha-Hora Sí
+politicaAplicada Resumen de política (cargos/penalidad si
+aplica).
+Texto No
+Códigos de error
+Código Descripción
+400 INV ALID
+_
+REQUEST - Datos de cancelación
+inválidos
+401 UNAUTHORIZED - Token inválido
+404 RESERV ATION
+_
+NOT
+_
+FOUND - La reserva no
+existe
+409 ALREADY
+_
+CANCELLED - La reserva ya fue
+cancelada previamente
+500 INTERNAL
+_
+ERROR - Error interno del servidor
+Diagrama de secuencia
+JSONs
+Busqueda de vuelos
+-
+Request
+-
+Response
+Pre-reserva de vuelo
+-
+Request
+-
+Response
+Confirmación de reserva
+-
+Request
+-
+Response
+Cancelación de reserva
+-
+Request
+-
+Response
+
+DOCUMENTO INICIAL
+Data Governance
+Turism System
+Eliana Katherine Cepeda Gonzalez
+(Ingeniería de Sistemas)
+David Ricardo Gutierrez Gonzalez
+(Ingeniería de Sistemas)
+Ivan Dario Orozco Ibañez
+(Ingeniería Electrónica y de Sistemas)
+Facultad de Ingeniería, Pontificia Universidad Javeriana
+SISTEMAS 4800-5 (4068): Arquitectura de Software (Teo-Prac)
+Sergio Orlando Naranjo Alvira
+28 de octubre del 2025
+DOCUMENTO INICIAL 2.
+Gobernanza de Datos: Alcance y Objetivo
+Este marco define cómo se gestionan los datos como un activo compartido entre Banco,
+Turismo, Aerolínea y Hotel. Su propósito es:
+●
+Garantizar unicidad y consistencia de la información crítica.
+●
+Asegurar trazabilidad extremo a extremo de las reservas.
+●
+Establecer controles de seguridad y privacidad.
+●
+Alinear los modelos de información entre equipos.
+Estos lineamientos se sustentan en el cuerpo de conocimiento de gestión de datos
+corporativos propuesto por DAMA-DMBOK, los principios de gobierno de datos de ISO/IEC
+38505-1, y las prácticas de trazabilidad y validación de IEEE 1012.
+Alcance
+Aplica a las entidades del diagrama conceptual unificado: Clients, Cities, Employees,
+BankAccounts, Transactions, TouristPackages, Reservations, Flights,
+PassengersFlights, Hotels, Rooms, HotelsReservations. Cubre su ciclo de vida (creación,
+actualización, consulta, retención e inactivación) y su intercambio entre dominios.
+Principios rectores
+●
+Unicidad: cada entidad maestra tiene una única fuente oficial (System of Record) y un
+responsable funcional (Data Owner).
+●
+Interoperabilidad: todos los sistemas deben usar los mismos identificadores globales y
+formatos estándar (ISO 8601 para fechas, ISO 3166-2 para ciudades, ISO 4217 para
+monedas).
+●
+Seguridad por diseño: los datos sensibles (documento, número de cuenta bancaria,
+credenciales) se protegen siguiendo ISO/IEC 27001, NIST SP 800-53, PCI DSS y OWASP
+ASVS.
+●
+Trazabilidad: cada cambio relevante deja rastro auditable con quién lo hizo, cuándo y
+sobre qué entidad.
+●
+Calidad medible: se definen métricas de calidad y consistencia de datos siguiendo IEEE
+1061.
+Pontificia Universidad Javeriana
+Arquitectura de Software
+DOCUMENTO INICIAL 3.
+Modelo Conceptual Unificado
+El modelo conceptual articula a los cuatro dominios: Banco, Agencia de Turismo, Hotel y
+Aerolínea. No es físico ni relacional, describe entidades de negocio, sus atributos clave y las
+relaciones entre ellas.
+Figura 1. Diagrama conceptual unificado del sistema de gestión y control de Turismo,
+Aerolínea, Hotel y Banco.
+Datos Maestros
+●
+Clientes: Personas que compran paquetes turísticos, vuelan, se alojan y tienen cuentas
+bancarias. Su identificación representa el número de identificación de cada cliente
+(Estándar: IdCliente)
+●
+Ciudades: Catálogo común de ciudades para reservar habitaciones, vuelos y planes
+turísticos (Estándar: idCiudad).
+Pontificia Universidad Javeriana
+Arquitectura de Software
+DOCUMENTO INICIAL 4.
+●
+Estados:Catalogo común de estados de confirmación, cancelación o denegación
+●
+Reservaciones: Reserva de una habitación y un vuelo dentro de un plan turístico
+(Estándar: idReserva).
+●
+Hoteles: Almacena el inventario de hoteles, están incluidos en los planes turísticos de la
+agencia de turismo (Estandar: idHotel).
+●
+Habitaciones: Habitaciones de un hotel, pueden ser reservadas por la solución de
+turismo (Estandar: idHabitación).
+●
+Vuelos: Oferta operativa de la aerolínea, pueden ser reservados por la solución de
+turismo (Estandar: idVuelo).
+●
+Empleados: Actores internos responsables de autorizar operaciones críticas y realizar
+consultas de información (Estandar: idEmpleado).
+●
+Transacciones: Registro bancario de un cobro asociado a una reserva (Estandar:
+idTransacción).
+Entidades transaccionales
+●
+TouristPackages: propuesta de viaje ofrecida al cliente; incluye destino, fechas y precio
+total.
+●
+Reservations: orden global de viaje. Agrupa el paquete turístico, el intento de pago y el
+estado de la compra (pendiente, pagada, cancelada, etc.).
+●
+Transactions: resultado del proceso de pago en el Banco; incluye monto, medio de pago
+y estado (pendiente, aprobada, rechazada). Es la prueba financiera vinculada a la
+reserva.
+●
+PassengersFlights: asignación de pasajeros a vuelos específicos y asientos.
+●
+HotelsReservations: asignación de habitaciones a una reserva, con fechas de check-in y
+check-out.
+Estas entidades transaccionales conectan dominios diferentes. Por ejemplo: una
+Reservation confirmada dispara tanto la reserva de habitación en el hotel como la
+asignación de vuelo y asiento en la aerolínea.
+Pontificia Universidad Javeriana
+Arquitectura de Software
+DOCUMENTO INICIAL 5.
+Propiedad de Datos y Sistema de Registro Oficial
+Cada entidad maestra tiene un Owner funcional responsable de la veracidad del dato (Data
+Owner) y un System of Record (SoR), el sistema donde ese dato se considera canónico.
+Reglas:
+●
+TurismClients — Owner: Turismo; SoR: Solución de Turismo. Otros sistemas pueden
+leer, no modificar.
+●
+BanckClients — Owner: Banco; SoR: Sistema bancario. Otros sistemas pueden leer, no
+modificar.
+●
+Cities — Owner: Estandar; SoR: Catálogo de destinos. Todos consumen este catálogo
+para orígenes/destinos y ubicaciones.
+●
+Hotels / Rooms — Owner: Hotel; SoR: Sistema del hotel (Property Management).
+Turismo consulta disponibilidad, no edita estructura.
+●
+Flights — Owner: Aerolínea; SoR: Sistema de operaciones de vuelo. Turismo no crea
+vuelos ni cambia horarios.
+●
+Reservations — Owner: Turismo; SoR: Sistema de reservas de Turismo. Hotel y
+Aerolínea consumen la reserva confirmada.
+●
+Transactions — Owner: Banco; SoR: Sistema financiero del banco. Turismo no altera el
+resultado de pago, solo lo referencia.
+Identificadores Globales y Formatos
+●
+ClientID: <tipoDoc>-<numero> (ej.: CC-1032456789). Estable y global.
+●
+CityID: basado en ISO 3166-2 (ej.: CO-BOG):
+https://gist.github.com/mindplay-dk/4755200?permalink
+_
+comment
+_
+id=3519197
+●
+StateID: APROBADA ; DENEGADA; PENDIENTE: CANCELADA.
+●
+FlightID: código de vuelo único que incluye aerolínea y fecha: recomendado UUID v4.
+●
+HotelID, RoomID, ReservationID, TransactionID, EmployeeID: recomendado UUID v4.
+Pontificia Universidad Javeriana
+Arquitectura de Software
+DOCUMENTO INICIAL 6.
+●
+Fechas y horas: formato ISO 8601, incluyendo zona horaria cuando aplique:
+https://www-iso-org.translate.goog/iso-8601-date-and-time-format.html?
+_
+x
+_
+tr
+_
+sl=en&
+_
+x
+_
+tr
+_
+tl=es&
+_
+x
+_
+tr
+_
+hl=es&
+_
+x
+_
+tr
+_pto=tc
+●
+Correo electrónico: sintaxis conforme a RFC 5322:
+https://www.rfc-editor .org/rfc/rfc5322.html
+Políticas de Creación, Actualización y Consulta (CRUD)
+Clients
+●
+Create: Banco y agencia de turismo.
+●
+Update: Los empleados del banco y la agencia de turismo pueden actualizar sus
+atributos personales.
+●
+Read: Todos los dominios pueden leer lo necesario para prestar el servicio.
+●
+Delete: No se elimina físicamente; se marca active = false.
+Reservations
+●
+Create: Turismo al confirmar un paquete.
+●
+Update: Turismo cambia status (pendiente, pagada, cancelada, etc.). Hotel y Aerolínea
+adjuntan estados operativos sin alterar información financiera.
+●
+Read: Hotel y Aerolínea consumen la reserva confirmada.
+●
+Delete: Solo Turismo puede cancelar, y solo si no existe transacción aprobada asociada.
+Transactions
+●
+Create: Banco.
+●
+Update: Empleado del banco (Cambio del estado de la transacción) y Sistema bancario
+●
+Read: Turismo lee el resultado y lo enlaza a la reserva; Hotel y Aerolínea ven el resultado
+de la transacción (Pagado o no pagado).
+●
+Delete: Nunca se borra por razones regulatorias y de auditoría financiera.
+Flights
+●
+Create: La aerolínea puede crear vuelos.
+●
+Update: La aerolínea puede cambiar las características de un vuelo.
+●
+Read: La solución de turismo y la aerolínea deben de consultar los vuelos existentes.
+●
+Delete: Solo la aerolínea puede cancelar un vuelo.
+Rooms
+●
+Create: El hotel puede crear habitaciones
+●
+Update: El hotel puede cambiar las características de una habitación
+Pontificia Universidad Javeriana
+Arquitectura de Software
+DOCUMENTO INICIAL 7.
+●
+Read: La solución de turismo debe de consultar las habitaciones disponibles, y el hotel
+debe conocer su catálogo de habitaciones.
+●
+Delete: El hotel es la única entidad que puede eliminar una habitación.
+Hotel
+●
+Create: La empresa de hoteles puede crear sucursales en diferentes ciudades.
+●
+Update: El hotel puede cambiar sus características
+●
+Read: La solución de turismo debe de consultar los hoteles disponibles en un lugar
+especifico, y el hotel debe conocer sus caracteristicas.
+●
+Delete: La empresa de hoteles puede eliminar sucursales de las diferentes ciudades.
+Controles
+Clients
+Los clientes tendrán un usuario para cada uno de los sistemas, el cual estará conformado
+con los siguientes atributos:
+●
+Tipo de documento: Tipo de documento del cliente
+●
+Número de documento: Representa el ID del usuario en cada uno de los sistemas
+Para realizar una transacción, el cliente debe ingresar la contraseña asociada a su número
+de documento para poder iniciar sesión en el banco y autorizar su transacción.
+Transactions
+Las transacciones son creadas únicamente por el banco cada vez que un usuario quiere
+realizar el pago de un paquete turístico
+●
+Solo pueden ser procesadas si el cliente se autentica correctamente en el banco.
+●
+El idTransacción es el identificador global de las transacciones para todos los
+sistemas.
+●
+Para realizar una transacción, siempre se debe verificar la identidad del usuario en
+relación a su cuenta bancaria.
+Calidad e Integridad de Datos
+1. Unicidad de Clients: ningún ClientID puede repetirse.
+Pontificia Universidad Javeriana
+Arquitectura de Software
+DOCUMENTO INICIAL 8.
+2. Reserva vs Pago: una reserva solo puede pasar a pagada si existe transacción aprobada
+asociada.
+3. Check-in Hotel: el hotel solo marca checked
+_
+in si la reserva global está pagada.
+4. Asignación de Vuelo: cada PassengersFlights vincula pasajero/reserva con vuelo real y
+asiento único.
+5. Catálogo de Ciudades: todas las referencias deben usar códigos del catálogo Cities.
+Seguridad y Cumplimiento
+Controles de Seguridad
+Transacciones en el banco:
+●
+El banco contará con un sistema de autenticación fuerte basado en el documento del
+cliente y la contraseña de su cuenta bancaria.
+●
+Se validará el formato del documento y las reglas de la contraseña con mensajes no
+numerables (sin revelar los datos incorrectos)
+●
+La contraseña debe cumplir con las políticas de contraseña establecidas (6 dígitos
+numéricos)
+Protección de datos sensibles:
+●
+Hash de contraseñas. Las contraseñas no se guardan nunca en texto claro.
+●
+Cifrado en tránsito y en reposo. Toda comunicación entre clientes y servicios del banco
+viaja con base en el protocolo de seguridad TLS 1.3
+Control de acceso y rol
+●
+Banco: Ve y actualiza datos financieros y de identidad verificada.
+●
+Turismo: Ve identidad básica y estado del pago, no detalles completos del medio de
+pago.
+●
+Hotel y Aerolínea: solo lo necesario para prestar el servicio (nombre, fechas, estado de
+pago).
+Auditoría y trazabilidad
+Toda actualización relevante de estado debe registrarse con:
+●
+Entidad afectada.
+●
+Identificador único global.
+●
+Acción ejecutada (CREATE, STATUS
+_
+CHANGE, CHECK
+_
+IN, etc.);
+●
+Marca de tiempo ISO 8601.
+●
+Responsable (EmployeeID o servicio del dominio)
+Pontificia Universidad Javeriana
+Arquitectura de Software
+DOCUMENTO INICIAL 9.
+Datos Mínimos
+Reserva
+●
+Hotel: reservation
+_
+id, creation
+_
+date, client
+_
+id, room
+_
+id, check
+_
+in, check
+_
+out.
+●
+Turismo: reservation
+_
+id, creation
+_
+date, package
+_
+id, client
+_
+id.
+●
+Aerolinea: reservation
+_
+id, creation
+_
+date, flight
+_
+id, seat, client
+_
+id.
+●
+Banco: reservation
+_
+id, client
+_
+id, total
+_price.
+Cliente
+●
+Hotel: client
+_
+id (name, email, phone, born
+_
+date, nationality).
+●
+Turismo: client
+_
+id (name, email, phone, born
+_
+date, nationality).
+●
+Aerolinea: client
+_
+id (name, email, phone, born
+_
+date, nationality).
+●
+Banco: client
+_
+id (name, email, phone, born
+_
+date, nationality), bank
+_
+account
+_
+number.
+Consulta de información.
+●
+Toda información referente a la reserva de un paquete, vuelo o habitación, debe ser
+consultada por medio de su id (reservation
+_
+id)
+●
+Toda información referente a un usuario debe ser consultada por medio de su id
+(client
+_
+id)
+●
+Toda información referente a un pago debe ser consultada por medio del
+identificador de las transacciones (transaction
+_
+id)
+Política de Identificación de Transacciones
+Transacción: El banco es el único sistema responsable de generar las transacciones. Para
+generar el identificador de cada transacción debe de seguir el siguiente patrón:
+transaction_id = <BANCO>-<AÑO><MES><DÍA>-<SUFIJO>
+Ejemplo: BDB-20251029-0549A4
+Se usará transaction
+_
+id para consultar cualquier información referente a un pago
+Linaje de Datos (Data Lineage Inter-Dominio)
+1. Registro / Identidad: alta de cliente por Banco (verificada) o Turismo
+(provisional). El Banco consolida la identidad y es custodio de ClientID.
+Pontificia Universidad Javeriana
+Arquitectura de Software
+DOCUMENTO INICIAL 10.
+2. Oferta de viaje: Turismo define un TouristPackage (destino, fechas, precio).
+3. Reserva: al confirmar intención de compra, se crea Reservation que referencia
+cliente y paquete.
+4. Pago: Turismo solicita cobro al Banco. El Banco genera Transaction (pendiente) y la
+procesa a aprobada o rechazada.
+5. Confirmación: si la transacción es aprobada, la Reservation pasa a pagada. Desde
+allí la consumen Hotel (HotelsReservations) y Aerolínea (PassengersFlights).
+6. Ejecución del servicio: Hotel asigna habitación y realiza check-in / check-out;
+Aerolínea asigna asiento y marca check-in / abordo.
+7. Trazabilidad: cada transición de estado se registra con responsable y marca de
+tiempo.
+Métricas de Calidad de Datos
+●
+Duplicidad de Clients: % de clientes cuyo ClientID aparece más de una vez. Meta: <
+0.5%.
+●
+Consistencia Reserva–Pago: % de reservas pagada sin transacción aprobada asociada.
+Meta: 0%.
+●
+Cobertura de catálogo Cities: % de registros (vuelos, hoteles) con CityID válida del
+catálogo común. Meta: 100%.
+●
+Integridad operativa: % de ocupaciones hoteleras (HotelsReservations) con check
+_
+in
+sin reserva pagada. Meta: 0%.
+Conclusiones del Primer Avance
+1. Un modelo conceptual unificado que cubre Banco, Turismo, Hotel y Aerolínea.
+2. Las entidades maestras (Clients, Cities, Hotels, Rooms, Flights, Employees) y las
+transaccionales (TouristPackages, Reservations, Transactions, PassengersFlights,
+HotelsReservations).
+3. La asignación de propiedad y System of Record para cada entidad.
+4. Reglas de unicidad, consistencia y control de estado entre Reserva y Pago.
+5. Lineamientos de seguridad y acceso, trazabilidad de cambios y auditoría.
+6. Linaje de datos extremo a extremo (desde la creación del cliente hasta el check-out
+del hotel y el abordaje del vuelo).
+Pontificia Universidad Javeriana
+Arquitectura de Software

@@ -1,26 +1,30 @@
 ### ============================================
 ### PRUEBAS DE INTEGRACIÓN - SISTEMA DE TURISMO
-### Basado en Documento de Gobernanza de Datos
+### Basado en Documentos Oficiales de Gobernanza
 ### ============================================
 ###
-### ESTADO DE SERVICIOS (actualizado 2025-11-26):
-### - Turismo (localhost:3001): ✅ OK - Auth, Clientes, Carrito, Quote
-### - Aerolínea (10.43.103.34:8080): ✅ PRODUCCIÓN - IP Pública
-### - Banco (localhost:3000): ⚠️ Endpoints legacy /api/pagos/*
-### - Hotel (10.43.103.234:8080): ⚠️ Responde 400 (puede requerir parámetros específicos)
+### ESTADO DE SERVICIOS (actualizado 2025-11-27):
+### ✅ Turismo (Proxy):   localhost:3001
+### ✅ Aerolínea:         10.43.103.34:8080 (IP Pública)
+### ✅ Hotel:             10.43.103.234:8080 (IP Pública)
+### ⚠️  Banco:            localhost:3000 (Local Docker) - usar puerto 80 si es IP pública
 ###
-### VUELOS DISPONIBLES EN AEROLÍNEA PRODUCCIÓN (fecha: 2025-12-01):
-### - f47ac10b-58cc-4372-a567-0e02b2c3d479 (BOG→MDE, 08:00, $250,000)
-### - c77ce5aa-b64a-4749-974a-8ba4a3336164 (BOG→MDE, 14:00, $280,000)
-### - d6169429-f777-44d3-9c44-ff2b0a4c7300 (BOG→MDE, 18:00, $300,000)
+### FORMATOS SEGÚN GOBERNANZA:
+### - ClientID: <tipoDoc>-<numero> (ej: CC-1032456789)
+### - CityID: ISO 3166-2 (ej: CO-BOG, CO-MDE)
+### - TransactionID: <BANCO>-YYYYMMDD-<SUFIJO> (ej: BDB-20251127-ABC123)
+### - StateID: APROBADA|DENEGADA|PENDIENTE|CANCELADA
+### - Currency: ISO 4217 (COP, USD)
+### - Fechas: ISO 8601 (2025-12-01T08:00:00)
 ###
-### NOTA: Backend Arqui usa AIRLINE_BASE_URL=http://10.43.103.34:8080
+### TRANSFORMACIONES:
+### - Turismo → Aerolínea: CO-BOG → BOG (IATA)
+### - Turismo → Hotel: CO-BOG → Bogotá (nombre)
 ###
-### ENDPOINTS HOTEL según documento:
-### - GET  /manejadordb/db/reservas/available-rooms
-### - POST /manejadordb/db/reservas
-### - PUT  /manejadordb/db/reservas/deliberacion
-### - PUT  /manejadordb/db/reservas/cancelacion
+### USUARIOS DE PRUEBA BANCO:
+### - Doc: 1234567890, Pass: cliente123, Balance: $5,000,000
+### - Doc: 9876543210, Pass: cliente123, Balance: $3,000,000
+### - Doc: 0000000000, Pass: cliente123, Balance: $10,000,000 (Guest)
 ###
 ### ============================================
 
@@ -29,130 +33,255 @@
 @bankUrl = http://localhost:3000
 @airlineUrl = http://10.43.103.34:8080/v1
 @hotelUrl = http://10.43.103.234:8080/manejadordb
+
+### Variables dinámicas (se actualizan con respuestas)
 @token = {{login.response.body.access_token}}
 @clientUuid = {{createClient.response.body.id}}
-@cartId = {{addToCart.response.body.id}}
+@cartId = {{addFlightToCart.response.body.id}}
+@reservationId = {{createReservation.response.body.id}}
+@flightReservationId = {{reserveFlightProxy.response.body.flightReservationId}}
+@hotelReservationId = {{reserveHotelProxy.response.body.hotelReservationId}}
+@paymentRef = {{initPayment.response.body.paymentAttemptId}}
 
 ### ============================================
-### CASO 0: Health Checks
+### CASO 0: HEALTH CHECKS
 ### ============================================
 
-### Health check - Turismo
+### 0.1 Health check - Turismo
+# ✅ RESPUESTA ÉXITO:
+# {"status":"ok","ts":"2025-11-27T06:17:11.271Z"}
 GET {{baseUrl}}/health
 
 ###
 
-### Ready check - Turismo
+### 0.2 Ready check - Turismo
+# ✅ RESPUESTA ÉXITO:
+# {"status":"ready","ts":"2025-11-27T06:17:11.311Z"}
 GET {{baseUrl}}/ready
 
 ###
 
 ### ============================================
-### CASO 1: Autenticación
+### CASO 1: AUTENTICACIÓN
+### Linaje: Registro/Identidad
 ### ============================================
 
-### 1.1 Registrar usuario empleado
+### 1.1 Registrar usuario ADMIN
+# ✅ RESPUESTA ÉXITO (201):
+# {"id":"uuid","email":"admin@turismo.com","name":"Administrador Turismo","role":"ADMIN","createdAt":"..."}
+#
+# ❌ ERROR: Email ya existe (409):
+# {"message":"Email already registered","error":"Conflict","statusCode":409}
+POST {{baseUrl}}/auth/register
+Content-Type: application/json
+
+{
+  "email": "admin@turismo.com",
+  "password": "Admin123!",
+  "name": "Administrador Turismo",
+  "role": "ADMIN"
+}
+
+###
+
+### 1.2 Registrar usuario EMPLEADO
+# ✅ RESPUESTA ÉXITO (201):
+# {"id":"uuid","email":"empleado@turismo.com","name":"Empleado Test","role":"EMPLOYEE","createdAt":"..."}
+#
+# ❌ ERROR: Email ya existe (409):
+# {"message":"Email already registered","error":"Conflict","statusCode":409}
 POST {{baseUrl}}/auth/register
 Content-Type: application/json
 
 {
   "email": "empleado@turismo.com",
-  "password": "password123",
+  "password": "Empleado123!",
   "name": "Empleado Test",
   "role": "EMPLOYEE"
 }
 
 ###
 
-### 1.2 Login y obtener JWT
+### 1.3 Login y obtener JWT
 # @name login
+# ✅ RESPUESTA ÉXITO (200):
+# {
+#   "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+#   "user": {
+#     "id": "14966bbb-bea4-4ac5-8af8-6b14eb4d00d0",
+#     "email": "admin@turismo.com",
+#     "name": "Admin Turismo",
+#     "role": "ADMIN"
+#   }
+# }
+#
+# ❌ ERROR: Credenciales inválidas (401):
+# {"message":"Invalid credentials","error":"Unauthorized","statusCode":401}
 POST {{baseUrl}}/auth/login
 Content-Type: application/json
 
 {
-  "email": "empleado@turismo.com",
-  "password": "password123"
+  "email": "admin@turismo.com",
+  "password": "Admin123!"
 }
 
 ###
 
 ### ============================================
-### CASO 2: Gestión de Clientes (CRUD)
-### Formato ClientID según gobernanza: <tipoDoc>-<numero>
+### CASO 2: GESTIÓN DE CLIENTES (CRUD)
+### Owner: Turismo | SoR: Solución de Turismo
+### Formato ClientID: <tipoDoc>-<numero>
 ### ============================================
 
 ### 2.1 Crear cliente
 # @name createClient
+# ✅ RESPUESTA ÉXITO (201):
+# {
+#   "id": "uuid-generado",
+#   "clientId": "CC-1020304050",
+#   "name": "María Pérez",
+#   "email": "maria.perez@test.com",
+#   "phone": "3001234567",
+#   "active": true,
+#   "createdAt": "2025-11-27T..."
+# }
+#
+# ❌ ERROR: ClientID ya existe (409):
+# {"message":"clientId ya existe","error":"Conflict","statusCode":409}
+#
+# ❌ ERROR: Formato clientId inválido (400):
+# {"statusCode":400,"error":"Bad Request","message":"Validation failed",
+#  "details":[{"property":"clientId","constraints":{"IsClientID":"clientId debe cumplir <tipoDoc>-<numero>"}}]}
 POST {{baseUrl}}/clients
 Content-Type: application/json
 Authorization: Bearer {{token}}
 
 {
-  "clientId": "CC-1032456789",
-  "name": "Juan Perez",
-  "email": "juan@email.com",
+  "clientId": "CC-1020304050",
+  "name": "María Pérez",
+  "email": "maria.perez@test.com",
   "phone": "3001234567"
 }
 
 ###
 
-### 2.2 Consultar cliente
+### 2.2 Consultar cliente (READ)
+# ✅ RESPUESTA ÉXITO (200):
+# {"id":"uuid","clientId":"CC-1020304050","name":"María Pérez","email":"maria.perez@test.com","phone":"3001234567","active":true}
+#
+# ❌ ERROR: No encontrado (404):
+# {"message":"Cliente no encontrado","error":"Not Found","statusCode":404}
+#
+# ❌ ERROR: Sin autorización (401):
+# {"message":"Unauthorized","statusCode":401}
 GET {{baseUrl}}/clients/{{clientUuid}}
 Authorization: Bearer {{token}}
 
 ###
 
-### 2.3 Actualizar cliente
+### 2.3 Actualizar cliente (UPDATE)
+# ✅ RESPUESTA ÉXITO (200):
+# {"id":"uuid","clientId":"CC-1020304050","name":"María Pérez García","phone":"3009876543",...}
+#
+# ❌ ERROR: No encontrado (404):
+# {"message":"Cliente no encontrado","error":"Not Found","statusCode":404}
 PATCH {{baseUrl}}/clients/{{clientUuid}}
 Content-Type: application/json
 Authorization: Bearer {{token}}
 
 {
-  "name": "Juan Carlos Perez",
+  "name": "María Pérez García",
   "phone": "3009876543"
 }
 
 ###
 
+### 2.4 Soft delete cliente (DELETE - marca active=false)
+# ✅ RESPUESTA ÉXITO (200):
+# {"id":"uuid","clientId":"CC-1020304050","active":false,"deletedAt":"2025-11-27T..."}
+#
+# ❌ ERROR: No encontrado (404):
+# {"message":"Cliente no encontrado","error":"Not Found","statusCode":404}
+DELETE {{baseUrl}}/clients/{{clientUuid}}
+Authorization: Bearer {{token}}
+
+###
+
 ### ============================================
-### CASO 3: Catálogo de Ciudades
-### Formato CityID según gobernanza: ISO 3166-2 (ej: CO-BOG)
+### CASO 3: CATÁLOGO DE CIUDADES
+### Owner: Estándar | Formato: ISO 3166-2
 ### ============================================
 
-### 3.1 Obtener todas las ciudades
+### 3.1 Obtener todas las ciudades (35 ciudades)
+# ✅ RESPUESTA ÉXITO (200):
+# [
+#   {"id":"CO-BOG","name":"Bogotá","country":"Colombia","iataCode":"BOG"},
+#   {"id":"CO-MDE","name":"Medellín","country":"Colombia","iataCode":"MDE"},
+#   {"id":"CO-CTG","name":"Cartagena","country":"Colombia","iataCode":"CTG"},
+#   {"id":"CO-CLO","name":"Cali","country":"Colombia","iataCode":"CLO"},
+#   {"id":"CO-BAQ","name":"Barranquilla","country":"Colombia","iataCode":"BAQ"},
+#   {"id":"CO-SMR","name":"Santa Marta","country":"Colombia","iataCode":"SMR"},
+#   {"id":"US-MIA","name":"Miami","country":"USA","iataCode":"MIA"},
+#   {"id":"ES-MAD","name":"Madrid","country":"España","iataCode":"MAD"},
+#   ... (35 ciudades en total)
+# ]
 GET {{baseUrl}}/catalog/cities
+Authorization: Bearer {{token}}
 
 ###
 
 ### ============================================
-### CASO 4: Vuelos (Aerolínea)
-### Servicio Aerolínea: http://localhost:8080
-### ENDPOINTS según documento:
-### - POST /v1/vuelos/buscar
-### - POST /v1/vuelos/reservar
-### - PUT  /v1/vuelos/reservas/{id}/confirmar
-### - DELETE /v1/vuelos/reservas/{id}
+### CASO 4: VUELOS VIA PROXY
+### Aerolínea: 10.43.103.34:8080
+### Owner: Aerolínea | SoR: Sistema de operaciones
 ### ============================================
 
-### 4.1 Buscar vuelos (DIRECTO a aerolínea)
-# @name searchFlights
-# NOTA: La aerolínea tiene vuelos para 2025-12-01
-POST {{airlineUrl}}/vuelos/buscar
-Content-Type: application/json
-
-{
-  "origen": "BOG",
-  "destino": "MDE",
-  "fechaSalida": "2025-12-01",
-  "fechaRegreso": null,
-  "numPasajeros": 2,
-  "clase": "ECONOMICA"
-}
-
-###
-
-### 4.2 Buscar vuelos vía Turismo (proxy)
-# NOTA: La aerolínea tiene vuelos para 2025-12-01
+### 4.1 Buscar vuelos via proxy (CO-BOG → CO-MDE)
+# @name searchFlightsProxy
+# NOTA: El proxy convierte CO-BOG → BOG automáticamente
+#
+# ✅ RESPUESTA ÉXITO (200) - Con vuelos:
+# {
+#   "queryId": "180feafa-3c78-4505-af58-bd498019d147",
+#   "flights": [
+#     {
+#       "flightId": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+#       "airline": "Avianca",
+#       "originCityId": "CO-BOG",
+#       "destinationCityId": "CO-MDE",
+#       "departsAt": "2025-12-01T08:00:00",
+#       "arrivesAt": "2025-12-01T09:30:00",
+#       "duration": "1h30m",
+#       "fare": "ECONOMICA",
+#       "rules": [],
+#       "price": 250000,
+#       "currency": "COP"
+#     },
+#     {
+#       "flightId": "c77ce5aa-b64a-4749-974a-8ba4a3336164",
+#       "airline": "Avianca",
+#       "departsAt": "2025-12-01T14:00:00",
+#       "price": 280000,
+#       ...
+#     },
+#     {
+#       "flightId": "d6169429-f777-44d3-9c44-ff2b0a4c7300",
+#       "departsAt": "2025-12-01T18:00:00",
+#       "price": 300000,
+#       ...
+#     }
+#   ]
+# }
+#
+# ⚠️ RESPUESTA: Sin vuelos disponibles (200):
+# {"queryId":"no-flights","flights":[]}
+#
+# ❌ ERROR: CityID inválido (400):
+# {"statusCode":400,"error":"Bad Request","message":"Validation failed",
+#  "details":[{"property":"originCityId","constraints":{"IsCityID":"originCityId debe ser CityID ISO 3166-2"}}]}
+#
+# ❌ ERROR: Aerolínea no disponible (500):
+# {"statusCode":500,"message":"Internal server error"}
 POST {{baseUrl}}/bookings/air/search
 Content-Type: application/json
 Authorization: Bearer {{token}}
@@ -167,162 +296,176 @@ Authorization: Bearer {{token}}
 
 ###
 
-### 4.3 Reservar vuelo (DIRECTO a aerolínea)
-# @name reserveFlight
-# IDs de vuelos en PRODUCCIÓN (10.43.103.34:8080, fecha: 2025-12-01):
-# - f47ac10b-58cc-4372-a567-0e02b2c3d479 (08:00, $250,000)
-# - c77ce5aa-b64a-4749-974a-8ba4a3336164 (14:00, $280,000)
-# - d6169429-f777-44d3-9c44-ff2b0a4c7300 (18:00, $300,000)
-POST {{airlineUrl}}/vuelos/reservar
-Content-Type: application/json
-
-{
-  "vueloId": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
-  "numPasajeros": 2,
-  "contactoReserva": "Juan Perez",
-  "documentoContacto": "CC-1032456789"
-}
-
-###
-
-### 4.4 Reservar vuelo vía Turismo (proxy)
+### 4.2 Pre-reservar vuelo via proxy
 # @name reserveFlightProxy
-# NOTA: El adaptador convierte CO-BOG → BOG automáticamente
+# NOTA: Usa flightId del paso anterior
+#
+# ✅ RESPUESTA ÉXITO (201):
+# {
+#   "flightReservationId": "RSV-12345678",
+#   "status": "PENDING",
+#   "expiresAt": "2025-11-27T12:30:00Z",
+#   "price": 250000,
+#   "currency": "COP"
+# }
+#
+# ❌ ERROR: Vuelo no encontrado (404):
+# {"message":"Vuelo no encontrado","statusCode":404}
+#
+# ❌ ERROR: Sin asientos disponibles (409):
+# {"message":"No hay asientos disponibles","statusCode":409}
 POST {{baseUrl}}/bookings/air/reserve
 Content-Type: application/json
 Authorization: Bearer {{token}}
 
 {
-  "reservationId": "{{$guid}}",
   "flightId": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
-  "clientId": "CC-1032456789",
+  "clientId": "CC-1020304050",
+  "reservationId": "{{$guid}}",
   "passengers": [
-    {"name": "Juan Perez", "doc": "CC-1032456789"},
-    {"name": "Maria Garcia", "doc": "CC-9876543210"}
+    {"name": "María Pérez", "document": "CC-1020304050"},
+    {"name": "Juan García", "document": "CC-9876543210"}
   ]
 }
 
 ###
 
-### 4.5 Confirmar reserva vuelo (DIRECTO a aerolínea)
-PUT {{airlineUrl}}/vuelos/reservas/{{reserveFlight.response.body.reservaVueloId}}/confirmar
-Content-Type: application/json
-
-{
-  "transaccionBancariaId": "BDB-20251126-ABC123",
-  "metodoPago": "PSE"
-}
-
-###
-
-### 4.6 Confirmar vuelo vía Turismo (proxy)
-# NOTA: flightReservationId es formato RSV... de la aerolínea (no UUID)
+### 4.3 Confirmar vuelo via proxy (después del pago)
+# @name confirmFlightProxy
+#
+# ✅ RESPUESTA ÉXITO (200):
+# {
+#   "confirmedId": "RSV-12345678",
+#   "status": "CONFIRMED",
+#   "ticketNumbers": ["TKT-001", "TKT-002"],
+#   "confirmedAt": "2025-11-27T12:00:00Z"
+# }
+#
+# ❌ ERROR: Reserva expirada (410):
+# {"message":"La reserva ha expirado","statusCode":410}
+#
+# ❌ ERROR: Reserva no encontrada (404):
+# {"message":"Reserva no encontrada","statusCode":404}
 POST {{baseUrl}}/bookings/air/confirm
 Content-Type: application/json
 Authorization: Bearer {{token}}
 
 {
-  "flightReservationId": "{{reserveFlightProxy.response.body.flightReservationId}}",
-  "transactionId": "BDB-20251126-ABC123"
+  "flightReservationId": "{{flightReservationId}}",
+  "transactionId": "BDB-20251127-TEST01"
 }
 
 ###
 
-### 4.7 Cancelar reserva vuelo (DIRECTO a aerolínea)
-DELETE {{airlineUrl}}/vuelos/reservas/{{reserveFlight.response.body.reservaVueloId}}
-
-###
-
-### 4.8 Cancelar vuelo vía Turismo (proxy)
+### 4.4 Cancelar vuelo via proxy
+# @name cancelFlightProxy
+#
+# ✅ RESPUESTA ÉXITO (200):
+# {
+#   "cancelled": true,
+#   "refundAmount": 200000,
+#   "refundCurrency": "COP",
+#   "penalty": 50000,
+#   "cancelledAt": "2025-11-27T12:00:00Z"
+# }
+#
+# ❌ ERROR: No cancelable (409):
+# {"message":"La reserva no puede ser cancelada","statusCode":409}
+#
+# ❌ ERROR: Ya cancelada (400):
+# {"message":"La reserva ya fue cancelada","statusCode":400}
 POST {{baseUrl}}/bookings/air/cancel
 Content-Type: application/json
 Authorization: Bearer {{token}}
 
 {
-  "confirmedId": "<CONFIRMED_FLIGHT_UUID>",
-  "reservationId": "<RESERVATION_UUID>",
+  "confirmedId": "{{flightReservationId}}",
+  "reservationId": "{{flightReservationId}}",
   "origin": "CLIENTE",
-  "reason": "Cambio de planes"
+  "reason": "Cambio de planes del cliente"
 }
 
 ###
 
 ### ============================================
-### CASO 5: Búsqueda de Hoteles
-### Servicio Hotel: http://10.43.103.234:8080
+### CASO 5: HOTELES VIA PROXY
+### Hotel: 10.43.103.234:8080
+### Owner: Hotel | SoR: Property Management
 ### ============================================
-###
-### HOTELES DISPONIBLES EN PRODUCCIÓN:
-### - Bogotá: Gran Hotel Andino (a32ab199-4381-4d33-9c61-590b323e6e92)
-### - Cartagena: Caribe Colonial Resort (618f172c-a72e-4098-aa04-de1d04cc4867)
-###
-### NOTA: El hotel usa GET con BODY JSON (no query params)
-### NOTA: Backend Arqui convierte CO-BOG → "Bogotá" automáticamente
-###
 
-### 5.1 Buscar habitaciones disponibles (DIRECTO al hotel)
-# NOTA: Este endpoint usa GET con body JSON
-# @name searchHotelDirect
-GET {{hotelUrl}}/db/reservas/available-rooms
-Content-Type: application/json
-
-{
-  "ciudad_destino": "Bogotá",
-  "fecha_checkin": "2025-12-20",
-  "fecha_checkout": "2025-12-25",
-  "num_adultos": 2,
-  "num_habitaciones": 1
-}
-
-###
-
-### 5.2 Buscar hoteles vía Turismo (proxy)
-# @name searchHotelProxy
-# NOTA: El adaptador convierte CO-BOG → "Bogotá"
+### 5.1 Buscar hoteles via proxy (CO-MDE → Medellín)
+# @name searchHotelsProxy
+# NOTA: El proxy convierte CO-MDE → "Medellín" automáticamente
+#
+# ✅ RESPUESTA ÉXITO (200):
+# {
+#   "queryId": "09f8b0af-84a8-4624-a223-eae5ae03fe94",
+#   "hotelId": "2725c068-4383-4f50-8494-fdc5fdfab7ac",
+#   "name": "Ponti-Marriott Medellín",
+#   "cityId": "Medellín",
+#   "stars": 5,
+#   "amenities": [],
+#   "photos": ["https://example.com/images/hotels/medellin-1.jpg"],
+#   "roomTypes": [
+#     {
+#       "roomId": "caa5f8a2-eb5c-47ef-a423-4777fe0a24c3",
+#       "roomType": "Habitación Doble Estándar",
+#       "roomCode": "doble",
+#       "available": true,
+#       "priceTotal": 400000,
+#       "currency": "COP",
+#       "amenities": []
+#     }
+#   ]
+# }
+#
+# ⚠️ RESPUESTA: Sin hoteles disponibles (200):
+# {"queryId":"uuid","hotels":[]}
+#
+# ❌ ERROR: Hotel no disponible (500):
+# {"statusCode":500,"message":"Internal server error"}
 POST {{baseUrl}}/bookings/hotels/search
 Content-Type: application/json
 Authorization: Bearer {{token}}
 
 {
-  "cityId": "CO-BOG",
-  "checkIn": "2025-12-20",
-  "checkOut": "2025-12-25",
+  "cityId": "CO-MDE",
+  "checkIn": "2025-12-15",
+  "checkOut": "2025-12-20",
   "adults": 2,
   "rooms": 1
 }
 
 ###
 
-### 5.3 Crear reserva de habitación (DIRECTO al hotel)
-# @name reserveHotelDirect
-POST {{hotelUrl}}/db/reservas
-Content-Type: application/json
-
-{
-  "id_hotel": "a32ab199-4381-4d33-9c61-590b323e6e92",
-  "codigo_tipo_habitacion": "doble",
-  "fecha_checkin": "2025-12-20",
-  "fecha_checkout": "2025-12-25",
-  "cedula_reserva": "1234567890",
-  "num_habitaciones": "1",
-  "num_adultos": "2"
-}
-
-###
-
-### 5.4 Reservar hotel vía Turismo (proxy)
+### 5.2 Pre-reservar hotel via proxy
 # @name reserveHotelProxy
-# NOTA: roomId es el código (ej: "doble"), no UUID
+# NOTA: roomId es el código (ej: "doble", "simple"), no UUID
+#
+# ✅ RESPUESTA ÉXITO (201):
+# {
+#   "hotelReservationId": "uuid-reserva-hotel",
+#   "status": "PENDING",
+#   "expiresAt": "2025-11-27T12:30:00Z",
+#   "totalPrice": 2000000,
+#   "currency": "COP"
+# }
+#
+# ❌ ERROR: Habitación no disponible (409):
+# {"message":"Habitación no disponible","statusCode":409}
+#
+# ❌ ERROR: Hotel no encontrado (404):
+# {"message":"Hotel no encontrado","statusCode":404}
 POST {{baseUrl}}/bookings/hotels/reserve
 Content-Type: application/json
 Authorization: Bearer {{token}}
 
 {
-  "hotelId": "a32ab199-4381-4d33-9c61-590b323e6e92",
+  "hotelId": "2725c068-4383-4f50-8494-fdc5fdfab7ac",
   "roomId": "doble",
-  "clientId": "CC-1234567890",
-  "checkIn": "2025-12-20",
-  "checkOut": "2025-12-25",
+  "clientId": "CC-1020304050",
+  "checkIn": "2025-12-15",
+  "checkOut": "2025-12-20",
   "reservationId": "{{$guid}}",
   "rooms": 1,
   "adults": 2
@@ -330,205 +473,394 @@ Authorization: Bearer {{token}}
 
 ###
 
-### 5.5 Confirmar reserva hotel (DIRECTO al hotel)
-# NOTA: El hotel espera UUID para id_transaccion
-PUT {{hotelUrl}}/db/reservas/deliberacion
-Content-Type: application/json
-
-{
-  "id_reserva": "{{reserveHotelDirect.response.body.[0].id_reserva}}",
-  "id_transaccion": "{{$guid}}",
-  "estado": "CONFIRMADO"
-}
-
-###
-
-### 5.6 Confirmar hotel vía Turismo (proxy)
-# NOTA: El adaptador convierte transactionId banco a UUID automáticamente
+### 5.3 Confirmar hotel via proxy (después del pago)
+# @name confirmHotelProxy
+# NOTA: El proxy convierte transactionId del banco a UUID
+#
+# ✅ RESPUESTA ÉXITO (200):
+# {
+#   "confirmedId": "uuid-confirmacion",
+#   "status": "CONFIRMED",
+#   "confirmationCode": "HTL-12345",
+#   "confirmedAt": "2025-11-27T12:00:00Z"
+# }
+#
+# ❌ ERROR: Reserva expirada (410):
+# {"message":"La reserva ha expirado","statusCode":410}
 POST {{baseUrl}}/bookings/hotels/confirm
 Content-Type: application/json
 Authorization: Bearer {{token}}
 
 {
-  "hotelReservationId": "{{reserveHotelProxy.response.body.hotelReservationId}}",
-  "transactionId": "BDB-20251126-HOTEL01"
+  "hotelReservationId": "{{hotelReservationId}}",
+  "transactionId": "BDB-20251127-TEST02"
 }
 
 ###
 
-### 5.7 Cancelar reserva hotel (DIRECTO al hotel)
-PUT {{hotelUrl}}/db/reservas/cancelacion
-Content-Type: application/json
-
-{
-  "id_reserva": "{{reserveHotelDirect.response.body.[0].id_reserva}}",
-  "id_transaccion": "{{$guid}}",
-  "cedula_reserva": "1234567890",
-  "origen_solicitud": "CLIENTE",
-  "motivo": "Prueba QA",
-  "observaciones": "Cancelación de prueba"
-}
-
-###
-
-### 5.8 Cancelar hotel vía Turismo (proxy)
+### 5.4 Cancelar hotel via proxy
+# @name cancelHotelProxy
+#
+# ✅ RESPUESTA ÉXITO (200):
+# {
+#   "cancelled": true,
+#   "refundAmount": 1800000,
+#   "penalty": 200000,
+#   "cancelledAt": "2025-11-27T12:00:00Z"
+# }
+#
+# ❌ ERROR: Fuera de periodo de cancelación (409):
+# {"message":"Fuera del período de cancelación gratuita","statusCode":409}
 POST {{baseUrl}}/bookings/hotels/cancel
 Content-Type: application/json
 Authorization: Bearer {{token}}
 
 {
-  "confirmedId": "{{reserveHotelProxy.response.body.hotelReservationId}}",
+  "confirmedId": "{{hotelReservationId}}",
   "reservationId": "{{$guid}}",
   "origin": "CLIENTE",
-  "reason": "Cambio de planes",
-  "notes": "Cancelación solicitada por el cliente"
+  "reason": "Cancelación por fuerza mayor",
+  "notes": "Solicitud realizada antes del check-in"
 }
 
 ###
 
 ### ============================================
-### CASO 6: Carrito de Compras
+### CASO 6: CARRITO DE COMPRAS
 ### ============================================
 
-### 6.1 Agregar vuelo al carrito
-# @name addToCart
+### 6.1 Limpiar carrito (antes de empezar)
+# ✅ RESPUESTA ÉXITO (200):
+# {"id":"uuid-carrito","clientId":"CC-1020304050","currency":"COP","total":0,"items":[]}
+#
+# ⚠️ RESPUESTA: Carrito no existe, se crea vacío (200):
+# {"id":"nuevo-uuid","clientId":"CC-1020304050","currency":"COP","total":0,"items":[]}
+DELETE {{baseUrl}}/cart?clientId=CC-1020304050
+Authorization: Bearer {{token}}
+
+###
+
+### 6.2 Agregar VUELO al carrito
+# @name addFlightToCart
+# NOTA: metadata REQUIERE: flightId, passengers[]
+#
+# ✅ RESPUESTA ÉXITO (200):
+# {
+#   "id": "3b53a01f-e7fa-46ed-8524-9b0c2d05bbdb",
+#   "clientId": "CC-1020304050",
+#   "currency": "COP",
+#   "total": 250000,
+#   "items": [
+#     {
+#       "id": "d6b3b11b-7db1-4c1e-bc0a-7b497f84bde7",
+#       "kind": "AIR",
+#       "refId": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+#       "quantity": 1,
+#       "price": 250000,
+#       "currency": "COP",
+#       "metadata": {
+#         "flightId": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+#         "passengers": [{"doc":"CC-1020304050","name":"María Pérez"}],
+#         "departureAt": "2025-12-01T08:00:00",
+#         "originCityId": "CO-BOG",
+#         "destinationCityId": "CO-MDE"
+#       }
+#     }
+#   ]
+# }
+#
+# ❌ ERROR: Metadata incompleta (400):
+# {"statusCode":400,"message":"metadata.passengers es requerido para items AIR"}
 POST {{baseUrl}}/cart/items
 Content-Type: application/json
 Authorization: Bearer {{token}}
 
 {
-  "clientId": "CC-1032456789",
+  "clientId": "CC-1020304050",
   "currency": "COP",
   "kind": "AIR",
-  "refId": "flight-001",
-  "quantity": 2,
-  "price": 450000,
+  "refId": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+  "quantity": 1,
+  "price": 250000,
   "metadata": {
-    "flightId": "550e8400-e29b-41d4-a716-446655440000",
+    "flightId": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
     "passengers": [
-      {"name": "Juan Perez", "age": 30, "seat": "12A"},
-      {"name": "Maria Garcia", "age": 28, "seat": "12B"}
-    ]
+      {"name": "María Pérez", "doc": "CC-1020304050"}
+    ],
+    "originCityId": "CO-BOG",
+    "destinationCityId": "CO-MDE",
+    "departureAt": "2025-12-01T08:00:00"
   }
 }
 
 ###
 
-### 6.2 Agregar hotel al carrito
+### 6.3 Agregar HOTEL al carrito
+# @name addHotelToCart
+# NOTA: metadata REQUIERE: hotelId, roomId, checkIn, checkOut
+#
+# ✅ RESPUESTA ÉXITO (200):
+# {
+#   "id": "3b53a01f-e7fa-46ed-8524-9b0c2d05bbdb",
+#   "clientId": "CC-1020304050",
+#   "currency": "COP",
+#   "total": 650000,
+#   "items": [
+#     { "kind": "AIR", "price": 250000, ... },
+#     {
+#       "id": "cb68f035-fea4-49aa-9538-d2b5ba0141a9",
+#       "kind": "HOTEL",
+#       "refId": "hotel-mde-doble",
+#       "quantity": 1,
+#       "price": 400000,
+#       "currency": "COP",
+#       "metadata": {
+#         "hotelId": "2725c068-4383-4f50-8494-fdc5fdfab7ac",
+#         "roomId": "doble",
+#         "checkIn": "2025-12-01",
+#         "checkOut": "2025-12-05"
+#       }
+#     }
+#   ]
+# }
+#
+# ❌ ERROR: Metadata incompleta (400):
+# {"statusCode":400,"message":"metadata.checkIn y metadata.checkOut son requeridos para items HOTEL"}
 POST {{baseUrl}}/cart/items
 Content-Type: application/json
 Authorization: Bearer {{token}}
 
 {
-  "clientId": "CC-1032456789",
+  "clientId": "CC-1020304050",
   "currency": "COP",
   "kind": "HOTEL",
-  "refId": "room-001",
+  "refId": "hotel-mde-doble",
   "quantity": 1,
-  "price": 350000,
+  "price": 400000,
   "metadata": {
-    "hotelId": "550e8400-e29b-41d4-a716-446655440001",
-    "roomId": "room-standard-01",
-    "checkIn": "2025-12-20",
-    "checkOut": "2025-12-25"
+    "hotelId": "2725c068-4383-4f50-8494-fdc5fdfab7ac",
+    "roomId": "doble",
+    "checkIn": "2025-12-01",
+    "checkOut": "2025-12-05"
   }
 }
 
 ###
 
-### 6.3 Ver carrito
-GET {{baseUrl}}/cart?clientId=CC-1032456789
+### 6.4 Ver carrito completo
+# @name getCart
+#
+# ✅ RESPUESTA ÉXITO (200):
+# {
+#   "id": "3b53a01f-e7fa-46ed-8524-9b0c2d05bbdb",
+#   "clientId": "CC-1020304050",
+#   "currency": "COP",
+#   "total": 650000,
+#   "items": [
+#     { "kind": "AIR", "price": 250000, ... },
+#     { "kind": "HOTEL", "price": 400000, ... }
+#   ]
+# }
+#
+# ⚠️ RESPUESTA: Carrito vacío (200):
+# {"id":"uuid","clientId":"CC-1020304050","currency":"COP","total":0,"items":[]}
+GET {{baseUrl}}/cart?clientId=CC-1020304050
 Authorization: Bearer {{token}}
 
 ###
 
-### 6.4 Eliminar item del carrito
-DELETE {{baseUrl}}/cart/items/<ITEM_ID>?clientId=CC-1032456789
-Authorization: Bearer {{token}}
-
-###
-
-### 6.5 Vaciar carrito
-DELETE {{baseUrl}}/cart?clientId=CC-1032456789
+### 6.5 Eliminar item del carrito
+# ✅ RESPUESTA ÉXITO (200):
+# {"id":"uuid","clientId":"CC-1020304050","total":250000,"items":[{...solo items restantes...}]}
+#
+# ❌ ERROR: Item no encontrado (404):
+# {"message":"Item no encontrado en el carrito","statusCode":404}
+DELETE {{baseUrl}}/cart/items/<ITEM_ID>?clientId=CC-1020304050
 Authorization: Bearer {{token}}
 
 ###
 
 ### ============================================
-### CASO 7: Checkout (Quote y Confirm)
+### CASO 7: CHECKOUT (QUOTE Y CONFIRM)
 ### ============================================
 
 ### 7.1 Obtener cotización (con márgenes aplicados)
-# Margen 10% para hoteles, 5% para vuelos
+# @name checkoutQuote
+# Margen: 10% hoteles, 5% vuelos
+#
+# ✅ RESPUESTA ÉXITO (200):
+# {
+#   "currency": "COP",
+#   "total": 702500,
+#   "items": [
+#     {
+#       "kind": "AIR",
+#       "refId": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+#       "price": 262500,
+#       "currency": "COP",
+#       "quantity": 1,
+#       "metadata": {
+#         "flightId": "...",
+#         "pricing": {
+#           "basePrice": 250000,
+#           "margin": 12500,
+#           "finalPrice": 262500
+#         }
+#       }
+#     },
+#     {
+#       "kind": "HOTEL",
+#       "price": 440000,
+#       "metadata": {
+#         "pricing": {
+#           "basePrice": 400000,
+#           "margin": 40000,
+#           "finalPrice": 440000
+#         }
+#       }
+#     }
+#   ]
+# }
+#
+# ⚠️ RESPUESTA: Carrito vacío (400):
+# {"message":"El carrito está vacío","statusCode":400}
 POST {{baseUrl}}/checkout/quote
 Content-Type: application/json
 Authorization: Bearer {{token}}
 
 {
-  "clientId": "CC-1032456789"
+  "clientId": "CC-1020304050"
 }
 
 ###
 
-### 7.2 Confirmar checkout (inicia proceso de pago)
+### 7.2 Confirmar checkout (crea reservas y pago)
+# @name checkoutConfirm
+#
+# ✅ RESPUESTA ÉXITO (201):
+# {
+#   "reservationId": "uuid-de-la-reserva",
+#   "orderId": "uuid-de-la-orden",
+#   "totalAmount": 702500,
+#   "currency": "COP",
+#   "paymentAttemptId": "BDB-20251127-XXXXX",
+#   "bankPaymentUrl": "http://localhost:3000/pago?ref=BDB-...",
+#   "initialState": "PENDIENTE",
+#   "expiresAt": "2025-12-01T12:30:00Z",
+#   "hotelReservations": [{"hotelReservationId": "...", "expiresAt": "..."}],
+#   "flightReservations": [{"flightReservationId": "...", "expiresAt": "..."}]
+# }
+#
+# ❌ ERROR: Carrito vacío (400):
+# {"message":"El carrito está vacío","statusCode":400}
+#
+# ❌ ERROR: Cliente no encontrado (404):
+# {"message":"Cliente no encontrado","statusCode":404}
+#
+# ❌ ERROR: Servicio de banco no disponible (500):
+# {"statusCode":500,"message":"Internal server error"}
 POST {{baseUrl}}/checkout/confirm
 Content-Type: application/json
 Authorization: Bearer {{token}}
 Idempotency-Key: checkout-{{$timestamp}}
 
 {
-  "clientId": "CC-1032456789",
+  "clientId": "CC-1020304050",
   "currency": "COP",
   "cartId": "{{cartId}}",
-  "description": "Reserva de vuelo BOG-MDE y hotel en Cartagena",
-  "returnUrl": "https://turismo.example.com/payments/return",
-  "callbackUrl": "https://turismo.example.com/payments/webhook"
+  "description": "Paquete Turístico BOG→MDE + Hotel",
+  "returnUrl": "http://localhost:3333/bank/response",
+  "callbackUrl": "http://localhost:3001/v1/payments/webhook"
 }
 
 ###
 
 ### ============================================
-### CASO 8: Pagos
+### CASO 8: PAGOS VIA PROXY → BANCO
+### Banco: localhost:3000
+### Owner: Banco | SoR: Sistema financiero
 ### ============================================
 
-### 8.1 Iniciar pago (requiere reservationId)
+### 8.1 Iniciar pago (requiere reservationId válido)
+# @name initPayment
+# NOTA: Normalmente NO llamas esto directamente - checkout/confirm lo hace por ti
+#
+# ✅ RESPUESTA ÉXITO (201):
+# {
+#   "paymentAttemptId": "BDB-20251127-XXXXX",
+#   "bankPaymentUrl": "http://localhost:3000/pago?ref=BDB-...",
+#   "initialState": "PENDIENTE",
+#   "expiresAt": "2025-12-01T12:15:00Z"
+# }
+#
+# ❌ ERROR: Reserva no encontrada (404):
+# {"message":"Reserva no encontrada","error":"Not Found","statusCode":404}
+#
+# ❌ ERROR: Banco no disponible (500):
+# {"statusCode":500,"message":"Error al conectar con el banco"}
 POST {{baseUrl}}/payments/init
 Content-Type: application/json
 Authorization: Bearer {{token}}
 Idempotency-Key: pay-{{$timestamp}}
 
 {
-  "reservationId": "<RESERVATION_UUID>",
-  "clientId": "CC-1032456789",
-  "totalAmount": 945000,
+  "reservationId": "{{reservationId}}",
+  "clientId": "CC-1020304050",
+  "clientName": "María Pérez",
+  "totalAmount": 702500,
   "currency": "COP",
-  "description": "Pago reserva vuelo y hotel",
-  "returnUrl": "https://turismo.example.com/payments/return",
-  "callbackUrl": "https://turismo.example.com/payments/webhook"
+  "description": "Pago paquete turístico",
+  "returnUrl": "http://localhost:3333/bank/response",
+  "callbackUrl": "http://localhost:3001/v1/payments/webhook"
 }
 
 ###
 
 ### 8.2 Consultar estado de pago
-# Formato TransactionID según gobernanza: <BANCO>-<YYYYMMDD>-<SUFIJO>
-GET {{baseUrl}}/payments/status?transactionId=BDB-20251126-ABC123
+# Formato TransactionID: <BANCO>-YYYYMMDD-<SUFIJO>
+#
+# ✅ RESPUESTA ÉXITO (200):
+# {
+#   "transactionId": "BDB-20251127-TEST01",
+#   "state": "APROBADA",
+#   "amount": 702500,
+#   "currency": "COP",
+#   "authCode": "AUTH123456",
+#   "processedAt": "2025-11-27T12:00:00Z"
+# }
+#
+# ⚠️ RESPUESTA: Pago pendiente (200):
+# {"transactionId":"BDB-...","state":"PENDIENTE","amount":702500}
+#
+# ❌ ERROR: Transacción no encontrada (404):
+# {"message":"Transacción no encontrada","statusCode":404}
+GET {{baseUrl}}/payments/status?transactionId={{paymentRef}}
 Authorization: Bearer {{token}}
 
 ###
 
-### 8.3 Webhook del banco (simulación)
+### 8.3 Webhook del banco (simulación de notificación)
+#
+# ✅ RESPUESTA ÉXITO (200):
+# {"received":true,"processed":true,"reservationUpdated":"uuid"}
+#
+# ❌ ERROR: Firma inválida (401):
+# {"message":"Firma de webhook inválida","statusCode":401}
+#
+# ❌ ERROR: Transacción no encontrada (404):
+# {"message":"Transacción no encontrada","statusCode":404}
 POST {{baseUrl}}/payments/webhook
 Content-Type: application/json
 
 {
-  "transactionId": "BDB-20251126-ABC123",
-  "paymentAttemptId": "pay-ext-001",
-  "clientId": "CC-1032456789",
-  "totalAmount": 945000,
+  "transactionId": "{{paymentRef}}",
+  "paymentAttemptId": "{{paymentRef}}",
+  "clientId": "CC-1020304050",
+  "totalAmount": 702500,
   "currency": "COP",
   "authCode": "AUTH123456",
-  "receiptRef": "https://banco.example.com/receipt/123",
-  "transactionAt": "2025-11-26T18:30:00Z",
+  "receiptRef": "https://banco.com/receipt/123",
+  "transactionAt": "2025-11-27T12:00:00Z",
   "signature": "abc123signaturehash",
   "state": "APROBADA"
 }
@@ -536,10 +868,26 @@ Content-Type: application/json
 ###
 
 ### ============================================
-### CASO 9: Reservaciones
+### CASO 9: RESERVACIONES
+### Owner: Turismo | SoR: Sistema de reservas
 ### ============================================
 
 ### 9.1 Crear reservación manualmente
+# @name createReservation
+#
+# ✅ RESPUESTA ÉXITO (201):
+# {
+#   "id": "uuid-reservacion",
+#   "clientUuid": "uuid-cliente",
+#   "currency": "COP",
+#   "totalAmount": 702500,
+#   "status": "PENDING",
+#   "note": "Paquete turístico de prueba",
+#   "createdAt": "2025-11-27T..."
+# }
+#
+# ❌ ERROR: Cliente no encontrado (404):
+# {"message":"Cliente no encontrado","statusCode":404}
 POST {{baseUrl}}/reservations
 Content-Type: application/json
 Authorization: Bearer {{token}}
@@ -547,75 +895,419 @@ Authorization: Bearer {{token}}
 {
   "clientUuid": "{{clientUuid}}",
   "currency": "COP",
-  "totalAmount": 945000,
-  "note": "Reserva de prueba"
+  "totalAmount": 702500,
+  "note": "Paquete turístico de prueba"
 }
 
 ###
 
 ### 9.2 Consultar reservación
-GET {{baseUrl}}/reservations/<RESERVATION_UUID>
+#
+# ✅ RESPUESTA ÉXITO (200):
+# {
+#   "id": "uuid",
+#   "clientUuid": "uuid-cliente",
+#   "status": "CONFIRMED",
+#   "totalAmount": 702500,
+#   "currency": "COP",
+#   "items": [...],
+#   "payments": [...],
+#   "createdAt": "...",
+#   "confirmedAt": "..."
+# }
+#
+# ❌ ERROR: No encontrada (404):
+# {"message":"Reservación no encontrada","statusCode":404}
+GET {{baseUrl}}/reservations/{{reservationId}}
 Authorization: Bearer {{token}}
 
 ###
 
-### 9.3 Listar reservaciones de un cliente
+### 9.3 Listar reservaciones del cliente
+#
+# ✅ RESPUESTA ÉXITO (200):
+# [
+#   {"id":"uuid1","status":"CONFIRMED","totalAmount":702500,...},
+#   {"id":"uuid2","status":"CANCELLED","totalAmount":500000,...}
+# ]
+#
+# ⚠️ RESPUESTA: Sin reservaciones (200):
+# []
 GET {{baseUrl}}/reservations?clientUuid={{clientUuid}}
 Authorization: Bearer {{token}}
 
 ###
 
 ### 9.4 Cancelar reservación
-PATCH {{baseUrl}}/reservations/<RESERVATION_UUID>/cancel
+#
+# ✅ RESPUESTA ÉXITO (200):
+# {
+#   "id": "uuid",
+#   "status": "CANCELLED",
+#   "cancelledAt": "2025-11-27T...",
+#   "reason": "Solicitud de cancelación del cliente",
+#   "refundAmount": 600000,
+#   "penaltyAmount": 102500
+# }
+#
+# ❌ ERROR: No cancelable (409):
+# {"message":"La reservación no puede ser cancelada","statusCode":409}
+#
+# ❌ ERROR: Ya cancelada (400):
+# {"message":"La reservación ya fue cancelada","statusCode":400}
+PATCH {{baseUrl}}/reservations/{{reservationId}}/cancel
 Content-Type: application/json
 Authorization: Bearer {{token}}
 
 {
-  "reason": "Cliente solicitó cancelación"
+  "reason": "Solicitud de cancelación del cliente"
 }
 
 ###
 
 ### ============================================
-### CASO 10: Reportes
+### CASO 10: REPORTES
 ### ============================================
 
 ### 10.1 Resumen de ventas
+#
+# ✅ RESPUESTA ÉXITO (200):
+# {
+#   "period": {"start":"2025-01-01","end":"2025-12-31"},
+#   "totalSales": 15000000,
+#   "totalTransactions": 25,
+#   "averageTransaction": 600000,
+#   "byCategory": {
+#     "AIR": {"count":15,"total":7500000},
+#     "HOTEL": {"count":10,"total":7500000}
+#   }
+# }
+#
+# ⚠️ RESPUESTA: Sin ventas (200):
+# {"period":{...},"totalSales":0,"totalTransactions":0,"byCategory":{}}
 GET {{baseUrl}}/reporting/sales?startDate=2025-01-01&endDate=2025-12-31
+Authorization: Bearer {{token}}
 
 ###
 
 ### 10.2 Resumen de reservaciones
+#
+# ✅ RESPUESTA ÉXITO (200):
+# {
+#   "total": 50,
+#   "byStatus": {
+#     "CONFIRMED": 30,
+#     "PENDING": 10,
+#     "CANCELLED": 10
+#   },
+#   "recentReservations": [...]
+# }
 GET {{baseUrl}}/reporting/reservations
+Authorization: Bearer {{token}}
 
 ###
 
 ### ============================================
-### CASO 11: Banco PSE (Directo)
+### CASO 11: BANCO DIRECTO (para debug)
+### Banco: localhost:3000
+### Usuarios: 1234567890, 9876543210, 0000000000
+### Contraseña: cliente123
 ### ============================================
 
-### 11.1 Crear pago en banco
-# Nota: El banco dockerizado tiene endpoints diferentes
+### 11.1 Crear pago directamente en banco
+#
+# ✅ RESPUESTA ÉXITO (201):
+# {
+#   "id_pago": 123,
+#   "referencia_transaccion": "BDB-20251127-XXXXX",
+#   "url_pago": "http://localhost:3000/pago?ref=BDB-...",
+#   "estado": "PENDIENTE"
+# }
+#
+# ❌ ERROR: Usuario no encontrado (404):
+# {"message":"Usuario no encontrado en el sistema bancario"}
 POST {{bankUrl}}/api/pagos/crear
 Content-Type: application/json
 
 {
-  "monto_total": 900000,
-  "descripcion_pago": "Reserva vuelo BOG-MDE",
-  "cedula_cliente": "CC-1032456789",
-  "nombre_cliente": "Juan Perez",
-  "url_respuesta": "https://turismo.example.com/bank/response",
-  "url_notificacion": "https://turismo.example.com/v1/payments/webhook",
-  "destinatario": "Agencia de Viajes"
+  "monto": 500000,
+  "descripcion_pago": "Reserva paquete Caribe #TEST123",
+  "cedula_cliente": "1234567890",
+  "nombre_cliente": "Juan Pérez",
+  "url_respuesta": "http://localhost:3333/bank/response",
+  "url_notificacion": "http://localhost:3001/v1/payments/webhook"
+}
+
+###
+
+### 11.2 Procesar pago en banco (simular autorización)
+#
+# ✅ RESPUESTA ÉXITO (200):
+# {
+#   "success": true,
+#   "message": "Pago procesado exitosamente",
+#   "pagoId": 123,
+#   "nuevoBalance": 4500000,
+#   "referencia_transaccion": "BDB-20251127-XXXXX",
+#   "estado_transaccion": "APROBADA",
+#   "codigo_autorizacion": "AUTH123456",
+#   "url_respuesta": "http://localhost:3333/bank/response"
+# }
+#
+# ❌ ERROR: Fondos insuficientes (400):
+# {"message":"Fondos insuficientes","statusCode":400}
+#
+# ❌ ERROR: Contraseña incorrecta (401):
+# {"message":"Contraseña incorrecta","statusCode":401}
+POST {{bankUrl}}/api/pagos/procesar
+Content-Type: application/json
+
+{
+  "id_pago": 123,
+  "cedula_cliente": "1234567890",
+  "contrasena": "cliente123"
+}
+
+###
+
+### 11.3 Consultar estado en banco
+#
+# ✅ RESPUESTA ÉXITO (200):
+# {"id_pago":123,"estado":"APROBADA","monto":500000,"fecha":"2025-11-27"}
+#
+# ❌ ERROR: Pago no encontrado (404):
+# {"message":"Pago no encontrado"}
+GET {{bankUrl}}/api/pagos/estado?referencia=BDB-20251127-TEST01
+
+###
+
+### ============================================
+### CASO 12: AEROLÍNEA DIRECTA (para debug)
+### Aerolínea: 10.43.103.34:8080
+### ============================================
+
+### 12.1 Buscar vuelos directo
+#
+# ✅ RESPUESTA ÉXITO (200):
+# {
+#   "consultaId": "2b494258-837c-4fac-b8d2-a9195ec988a9",
+#   "vuelos": [
+#     {
+#       "id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+#       "origen": "BOG",
+#       "destino": "MDE",
+#       "fechaSalida": "2025-12-01T08:00:00",
+#       "fechaLlegada": "2025-12-01T09:30:00",
+#       "clase": "ECONOMICA",
+#       "precio": 250000.0,
+#       "asientosDisponibles": 175,
+#       "estado": "PROGRAMADO",
+#       "aerolinea": "Avianca",
+#       "duracion": "1h30m",
+#       "moneda": "COP"
+#     },
+#     ...
+#   ]
+# }
+#
+# ⚠️ RESPUESTA: Sin vuelos (404):
+# {"message":"No se encontraron vuelos","statusCode":404}
+POST {{airlineUrl}}/vuelos/buscar
+Content-Type: application/json
+
+{
+  "origen": "BOG",
+  "destino": "MDE",
+  "fechaSalida": "2025-12-01",
+  "numPasajeros": 2,
+  "clase": "ECONOMICA"
+}
+
+###
+
+### 12.2 Reservar vuelo directo
+#
+# ✅ RESPUESTA ÉXITO (201):
+# {
+#   "reservaId": "RSV-12345678",
+#   "vueloId": "f47ac10b-...",
+#   "estado": "PENDIENTE",
+#   "fechaExpiracion": "2025-11-27T12:30:00Z"
+# }
+#
+# ❌ ERROR: Sin asientos (409):
+# {"message":"No hay asientos disponibles"}
+POST {{airlineUrl}}/vuelos/reservar
+Content-Type: application/json
+
+{
+  "vueloId": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+  "numPasajeros": 2,
+  "contactoReserva": "María Pérez",
+  "documentoContacto": "CC-1020304050"
+}
+
+###
+
+### 12.3 Confirmar vuelo directo
+#
+# ✅ RESPUESTA ÉXITO (200):
+# {"reservaId":"RSV-...","estado":"CONFIRMADO","ticketNumbers":["TKT-001","TKT-002"]}
+#
+# ❌ ERROR: Reserva expirada (410):
+# {"message":"La reserva ha expirado"}
+PUT {{airlineUrl}}/vuelos/reservas/<RESERVA_VUELO_ID>/confirmar
+Content-Type: application/json
+
+{
+  "transaccionBancariaId": "BDB-20251127-TEST01",
+  "metodoPago": "PSE"
+}
+
+###
+
+### 12.4 Cancelar vuelo directo
+#
+# ✅ RESPUESTA ÉXITO (200):
+# {"cancelado":true,"reembolso":200000,"penalidad":50000}
+DELETE {{airlineUrl}}/vuelos/reservas/<RESERVA_VUELO_ID>
+
+###
+
+### ============================================
+### CASO 13: HOTEL DIRECTO (para debug)
+### Hotel: 10.43.103.234:8080
+### ============================================
+
+### 13.1 Buscar habitaciones directo
+# NOTA: GET con body JSON
+#
+# ✅ RESPUESTA ÉXITO (200):
+# {
+#   "consulta_id": "ad29a984-e593-40dd-98cb-23cc8c2a39b4",
+#   "hoteles": [
+#     {
+#       "hotel_id": "2725c068-4383-4f50-8494-fdc5fdfab7ac",
+#       "nombre": "Ponti-Marriott Medellín",
+#       "categoria_estrellas": 5,
+#       "ciudad": "Medellín",
+#       "direccion": "Calle Falsa 3",
+#       "habitaciones": [
+#         {
+#           "habitacion_id": "caa5f8a2-eb5c-47ef-a423-4777fe0a24c3",
+#           "tipo": "Habitación Doble Estándar",
+#           "disponible": true,
+#           "codigo_tipo_habitacion": "doble",
+#           "precio": 400000.0,
+#           "servicios_habitacion": []
+#         }
+#       ]
+#     }
+#   ]
+# }
+#
+# ⚠️ RESPUESTA: Sin disponibilidad (200):
+# {"consulta_id":"uuid","hoteles":[]}
+GET {{hotelUrl}}/db/reservas/available-rooms
+Content-Type: application/json
+
+{
+  "ciudad_destino": "Medellín",
+  "fecha_checkin": "2025-12-15",
+  "fecha_checkout": "2025-12-20",
+  "num_adultos": 2,
+  "num_habitaciones": 1
+}
+
+###
+
+### 13.2 Crear reserva directo
+#
+# ✅ RESPUESTA ÉXITO (201):
+# {
+#   "id_reserva": "uuid-reserva",
+#   "estado": "PENDIENTE",
+#   "fecha_expiracion": "2025-11-27T12:30:00Z"
+# }
+#
+# ❌ ERROR: Habitación no disponible (409):
+# {"message":"Habitación no disponible para las fechas seleccionadas"}
+POST {{hotelUrl}}/db/reservas
+Content-Type: application/json
+
+{
+  "id_hotel": "2725c068-4383-4f50-8494-fdc5fdfab7ac",
+  "codigo_tipo_habitacion": "doble",
+  "fecha_checkin": "2025-12-15",
+  "fecha_checkout": "2025-12-20",
+  "cedula_reserva": "1020304050",
+  "num_habitaciones": "1",
+  "num_adultos": "2"
+}
+
+###
+
+### 13.3 Confirmar reserva directo
+#
+# ✅ RESPUESTA ÉXITO (200):
+# {"id_reserva":"uuid","estado":"CONFIRMADO","codigo_confirmacion":"HTL-12345"}
+#
+# ❌ ERROR: Reserva expirada (410):
+# {"message":"La reserva ha expirado"}
+PUT {{hotelUrl}}/db/reservas/deliberacion
+Content-Type: application/json
+
+{
+  "id_reserva": "<ID_RESERVA>",
+  "id_transaccion": "{{$guid}}",
+  "estado": "CONFIRMADO"
+}
+
+###
+
+### 13.4 Cancelar reserva directo
+#
+# ✅ RESPUESTA ÉXITO (200):
+# {"id_reserva":"uuid","estado":"CANCELADO","reembolso":360000,"penalidad":40000}
+#
+# ❌ ERROR: Fuera de período (409):
+# {"message":"Cancelación fuera del período gratuito"}
+PUT {{hotelUrl}}/db/reservas/cancelacion
+Content-Type: application/json
+
+{
+  "id_reserva": "<ID_RESERVA>",
+  "id_transaccion": "{{$guid}}",
+  "cedula_reserva": "1020304050",
+  "origen_solicitud": "CLIENTE",
+  "motivo": "Cancelación de prueba",
+  "observaciones": "Test QA"
 }
 
 ###
 
 ### ============================================
-### VALIDACIONES DE GOBERNANZA
+### CASO 14: VALIDACIONES DE GOBERNANZA
+### (Todas deben fallar con error 400)
 ### ============================================
 
-### Validar formato ClientID incorrecto (debería fallar)
+### 14.1 ClientID inválido (falta formato <tipoDoc>-<numero>)
+#
+# ❌ RESPUESTA ESPERADA (400):
+# {
+#   "statusCode": 400,
+#   "error": "Bad Request",
+#   "message": "Validation failed",
+#   "details": [
+#     {
+#       "property": "clientId",
+#       "constraints": {
+#         "IsClientID": "clientId debe cumplir <tipoDoc>-<numero>"
+#       },
+#       "valuePath": ["clientId"]
+#     }
+#   ]
+# }
 POST {{baseUrl}}/clients
 Content-Type: application/json
 Authorization: Bearer {{token}}
@@ -627,7 +1319,24 @@ Authorization: Bearer {{token}}
 
 ###
 
-### Validar formato CityID incorrecto (debería fallar)
+### 14.2 CityID inválido (no es ISO 3166-2)
+#
+# ❌ RESPUESTA ESPERADA (400):
+# {
+#   "statusCode": 400,
+#   "error": "Bad Request",
+#   "message": "Validation failed",
+#   "details": [
+#     {
+#       "property": "originCityId",
+#       "constraints": {"IsCityID": "originCityId debe ser CityID ISO 3166-2 (p.ej. CO-BOG)"}
+#     },
+#     {
+#       "property": "destinationCityId",
+#       "constraints": {"IsCityID": "destinationCityId debe ser CityID ISO 3166-2 (p.ej. CO-BOG)"}
+#     }
+#   ]
+# }
 POST {{baseUrl}}/bookings/air/search
 Content-Type: application/json
 Authorization: Bearer {{token}}
@@ -641,19 +1350,130 @@ Authorization: Bearer {{token}}
 
 ###
 
-### Validar formato moneda incorrecto (debería fallar)
+### 14.3 Currency inválido (no es ISO 4217)
+#
+# ❌ RESPUESTA ESPERADA (400):
+# {
+#   "statusCode": 400,
+#   "error": "Bad Request",
+#   "message": "Validation failed",
+#   "details": [
+#     {
+#       "property": "currency",
+#       "constraints": {"IsISO4217": "currency debe ser una moneda ISO-4217 válida (p.ej., USD, EUR, COP)"}
+#     }
+#   ]
+# }
 POST {{baseUrl}}/cart/items
 Content-Type: application/json
 Authorization: Bearer {{token}}
 
 {
-  "clientId": "CC-1032456789",
+  "clientId": "CC-123",
   "currency": "PESO",
   "kind": "AIR",
   "refId": "test",
   "quantity": 1,
-  "price": 100
+  "price": 100,
+  "metadata": {
+    "flightId": "test",
+    "passengers": [{"name": "Test", "doc": "CC-123"}]
+  }
 }
 
 ###
 
+### 14.4 Metadata incompleta para AIR (falta passengers)
+#
+# ❌ RESPUESTA ESPERADA (400):
+# {"statusCode":400,"message":"metadata.passengers es requerido para items AIR"}
+POST {{baseUrl}}/cart/items
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "clientId": "CC-1020304050",
+  "currency": "COP",
+  "kind": "AIR",
+  "refId": "flight-test",
+  "quantity": 1,
+  "price": 100000,
+  "metadata": {
+    "flightId": "test-id"
+  }
+}
+
+###
+
+### 14.5 Metadata incompleta para HOTEL (falta checkIn/checkOut)
+#
+# ❌ RESPUESTA ESPERADA (400):
+# {"statusCode":400,"message":"metadata.checkIn y metadata.checkOut son requeridos para items HOTEL"}
+POST {{baseUrl}}/cart/items
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "clientId": "CC-1020304050",
+  "currency": "COP",
+  "kind": "HOTEL",
+  "refId": "hotel-test",
+  "quantity": 1,
+  "price": 200000,
+  "metadata": {
+    "hotelId": "test-id",
+    "roomId": "doble"
+  }
+}
+
+###
+
+### ============================================
+### RESUMEN DE CÓDIGOS HTTP
+### ============================================
+###
+### 200 OK - Operación exitosa
+### 201 Created - Recurso creado exitosamente
+### 400 Bad Request - Error de validación o datos inválidos
+### 401 Unauthorized - Sin autenticación o token inválido
+### 404 Not Found - Recurso no encontrado
+### 409 Conflict - Conflicto (duplicado, no disponible)
+### 410 Gone - Recurso expirado (reserva expirada)
+### 500 Internal Server Error - Error del servidor
+###
+### ============================================
+### FLUJO COMPLETO DE PRUEBA
+### (Ejecutar en orden)
+### ============================================
+###
+### 1. Login (1.3) → obtener token
+### 2. Crear cliente (2.1) → obtener clientUuid
+### 3. Buscar vuelos (4.1) → obtener flightId
+### 4. Buscar hoteles (5.1) → obtener hotelId, roomId
+### 5. Limpiar carrito (6.1)
+### 6. Agregar vuelo al carrito (6.2)
+### 7. Agregar hotel al carrito (6.3)
+### 8. Ver carrito (6.4) → obtener cartId
+### 9. Checkout quote (7.1) → ver precios con márgenes
+### 10. Checkout confirm (7.2) → obtener bankPaymentUrl
+### 11. Usuario paga en banco (manual o 11.2)
+### 12. Consultar estado pago (8.2)
+### 13. Ver reservaciones (9.3)
+###
+### ============================================
+### DATOS DE PRUEBA DISPONIBLES
+### ============================================
+###
+### VUELOS (solo 2025-12-01):
+### - BOG → MDE: 08:00 ($250k), 14:00 ($280k), 18:00 ($300k)
+###
+### HOTELES:
+### - Medellín: Ponti-Marriott 5⭐ ($400k/noche)
+### - Bogotá: Gran Hotel Andino 4⭐ ($400k/noche)
+###
+### USUARIOS BANCO:
+### - 1234567890 / cliente123 / $5,000,000
+### - 9876543210 / cliente123 / $3,000,000
+### - 0000000000 / cliente123 / $10,000,000 (Guest)
+###
+### ============================================

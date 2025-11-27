@@ -1,15 +1,18 @@
-import { IsString, IsUrl } from 'class-validator';
+import { IsString, IsUrl, IsOptional } from 'class-validator';
 import { IsClientID } from '../../common/validation/decorators/is-client-id';
 import { IsISO4217 } from '../../common/validation/decorators/is-iso4217';
+
+// Opciones para permitir localhost en desarrollo
+const urlOptions = { require_tld: false, require_protocol: true };
 
 export class CheckoutConfirmRequestDto {
   @IsClientID() clientId!: string;
   @IsISO4217() currency!: string;
-  @IsString() cartId!: string;
+  @IsOptional() @IsString() cartId?: string; // Opcional si se usa clientId
 
   @IsString() description!: string;
-  @IsUrl() returnUrl!: string;
-  @IsUrl() callbackUrl!: string;
+  @IsUrl(urlOptions) returnUrl!: string;
+  @IsUrl(urlOptions) callbackUrl!: string;
 }
 
 export class CheckoutConfirmResponseDto {

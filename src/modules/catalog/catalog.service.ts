@@ -25,6 +25,7 @@ export class CatalogService {
       c.id,
       c.name,
       this.extractCountryFromId(c.id),
+      c.iataCode || c.id.split('-')[1] || c.id, // BOG, MDE, etc.
     ));
   }
 
@@ -46,6 +47,7 @@ export class CatalogService {
       city.id,
       city.name,
       this.extractCountryFromId(city.id),
+      city.iataCode || city.id.split('-')[1] || city.id,
     );
   }
 

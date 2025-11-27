@@ -40,16 +40,23 @@ export class HotelHttpAdapter implements HotelPort {
    * Respuesta: { consulta_id, hoteles: [...] }
    */
   async search(req: HotelSearchRequestDto): Promise<HotelSearchResponseDto> {
+    // ciudad_destino es OPCIONAL según docs.txt
+    const requestData: Record<string, unknown> = {
+      fecha_checkin: req.checkIn,
+      fecha_checkout: req.checkOut,
+      num_adultos: req.adults,
+      num_habitaciones: req.rooms,
+    };
+    
+    // Solo incluir ciudad_destino si se proporciona
+    if (req.cityId) {
+      requestData.ciudad_destino = cityIdToName(req.cityId);
+    }
+
     const { data } = await this.http.request({
       method: 'GET',
       url: '/manejadordb/db/reservas/available-rooms',
-      data: {
-        ciudad_destino: cityIdToName(req.cityId),
-        fecha_checkin: req.checkIn,
-        fecha_checkout: req.checkOut,
-        num_adultos: req.adults,
-        num_habitaciones: req.rooms,
-      },
+      data: requestData,
     });
     
     // El hotel devuelve { consulta_id, hoteles: [...] }

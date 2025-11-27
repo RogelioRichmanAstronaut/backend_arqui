@@ -48,34 +48,48 @@ export class AirlineHttpAdapter implements AirlinePort {
    * POST /v1/vuelos/buscar
    * 
    * Convierte CityID ISO 3166-2 a código IATA antes de enviar
+   * 
+   * NOTA: La aerolínea devuelve 404 si no hay vuelos, no es un error real
    */
   async search(req: AirlineSearchRequestDto): Promise<AirlineSearchResponseDto> {
-    const { data } = await this.http.post('/v1/vuelos/buscar', {
-      origen: cityIdToIata(req.originCityId),
-      destino: cityIdToIata(req.destinationCityId),
-      fechaSalida: req.departureAt ?? null,
-      fechaRegreso: req.returnAt ?? null,
-      numPasajeros: req.passengers,
-      clase: req.cabin,
-    });
-    return {
-      queryId: data?.consultaId ?? data?.consulta_id,
-      flights: (data?.vuelos ?? []).map((v: any) => ({
-        flightId: v?.vueloId ?? v?.Flight_id ?? v?.id,
-        airline: v?.aerolinea,
-        // Convertir códigos IATA a CityID ISO 3166-2 para consistencia en Turismo
-        originCityId: iataToCityId(v?.origen),
-        destinationCityId: iataToCityId(v?.destino),
-        departsAt: v?.fechaSalida ?? v?.fecha_salida,
-        arrivesAt: v?.fechaLlegada ?? v?.fecha_llegada,
-        duration: v?.duracion,
-        fare: v?.tarifa ?? v?.clase,
-        rules: v?.reglas ?? [],
-        price: Number(v?.precio),
-        currency: v?.moneda ?? 'COP',
-        baggage: v?.equipaje,
-      })),
-    };
+    try {
+      const { data } = await this.http.post('/v1/vuelos/buscar', {
+        origen: cityIdToIata(req.originCityId),
+        destino: cityIdToIata(req.destinationCityId),
+        fechaSalida: req.departureAt ?? null,
+        fechaRegreso: req.returnAt ?? null,
+        numPasajeros: req.passengers,
+        clase: req.cabin,
+      });
+      return {
+        queryId: data?.consultaId ?? data?.consulta_id,
+        flights: (data?.vuelos ?? []).map((v: any) => ({
+          flightId: v?.vueloId ?? v?.Flight_id ?? v?.id,
+          airline: v?.aerolinea,
+          // Convertir códigos IATA a CityID ISO 3166-2 para consistencia en Turismo
+          originCityId: iataToCityId(v?.origen),
+          destinationCityId: iataToCityId(v?.destino),
+          departsAt: v?.fechaSalida ?? v?.fecha_salida,
+          arrivesAt: v?.fechaLlegada ?? v?.fecha_llegada,
+          duration: v?.duracion,
+          fare: v?.tarifa ?? v?.clase,
+          rules: v?.reglas ?? [],
+          price: Number(v?.precio),
+          currency: v?.moneda ?? 'COP',
+          baggage: v?.equipaje,
+        })),
+      };
+    } catch (error: any) {
+      // 404 = No hay vuelos disponibles (no es un error real)
+      if (error.response?.status === 404) {
+        return {
+          queryId: error.response?.data?.consultaId ?? 'no-flights',
+          flights: [],
+        };
+      }
+      // Otros errores sí los propagamos
+      throw error;
+    }
   }
 
   /**
