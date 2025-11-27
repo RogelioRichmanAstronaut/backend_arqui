@@ -1,11 +1,13 @@
-import { IsUUID, IsIn, IsString } from 'class-validator';
+import { IsIn, IsString, MinLength, IsOptional } from 'class-validator';
 
 export class AirlineCancelRequestDto {
-  @IsUUID('4') confirmedId!: string;
-  @IsUUID('4') reservationId!: string;
+  /** ID de reserva confirmada (formato RSV... o UUID) */
+  @IsString() @MinLength(1) confirmedId!: string;
+  /** ID de reserva en Turismo (UUID) */
+  @IsString() @MinLength(1) reservationId!: string;
   @IsIn(['CLIENTE','TURISMO']) origin!: 'CLIENTE'|'TURISMO';
   @IsString() reason!: string;
-  notes?: string;
+  @IsOptional() @IsString() notes?: string;
 }
 export class AirlineCancelResponseDto {
   state!: 'SUCCESS'|'ERROR'; message?: string; cancelledAt!: string;

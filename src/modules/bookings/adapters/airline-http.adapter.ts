@@ -15,13 +15,40 @@ import {
 } from '../dtos/airline-cancel.dto';
 
 /**
+ * Extrae el código IATA de un CityID ISO 3166-2
+ * Ej: "CO-BOG" → "BOG", "CO-MDE" → "MDE"
+ * Si ya es IATA (sin guión), lo devuelve tal cual
+ */
+const extractIATA = (cityId: string): string => {
+  if (!cityId) return cityId;
+  const parts = cityId.split('-');
+  // Si tiene formato ISO 3166-2 (CO-BOG), devolver la segunda parte
+  return parts.length > 1 ? parts[1] : cityId;
+};
+
+/**
+ * Convierte código IATA a CityID ISO 3166-2 (asumiendo Colombia)
+ * Ej: "BOG" → "CO-BOG", "MDE" → "CO-MDE"
+ * Si ya tiene formato ISO 3166-2, lo devuelve tal cual
+ */
+const toISO3166 = (iataCode: string, countryCode = 'CO'): string => {
+  if (!iataCode) return iataCode;
+  // Si ya tiene guión, asumir que es ISO 3166-2
+  if (iataCode.includes('-')) return iataCode;
+  return `${countryCode}-${iataCode}`;
+};
+
+/**
  * Adapter HTTP para el servicio de Aerolínea
  * 
- * Endpoints reales (IP: 10.43.103.34:8080):
+ * Endpoints reales (localhost:8080):
  * - POST /v1/vuelos/buscar
  * - POST /v1/vuelos/reservar
  * - PUT  /v1/vuelos/reservas/{reservaVueloId}/confirmar
  * - DELETE /v1/vuelos/reservas/{reservaVueloId}
+ * 
+ * NOTA: La aerolínea usa códigos IATA (BOG, MDE) mientras que
+ * Turismo usa ISO 3166-2 (CO-BOG, CO-MDE). Este adapter hace la conversión.
  */
 export class AirlineHttpAdapter implements AirlinePort {
   private http: AxiosInstance;
@@ -38,11 +65,13 @@ export class AirlineHttpAdapter implements AirlinePort {
   /**
    * Búsqueda de vuelos
    * POST /v1/vuelos/buscar
+   * 
+   * Convierte CityID ISO 3166-2 a código IATA antes de enviar
    */
   async search(req: AirlineSearchRequestDto): Promise<AirlineSearchResponseDto> {
     const { data } = await this.http.post('/v1/vuelos/buscar', {
-      origen: req.originCityId,
-      destino: req.destinationCityId,
+      origen: extractIATA(req.originCityId),
+      destino: extractIATA(req.destinationCityId),
       fechaSalida: req.departureAt ?? null,
       fechaRegreso: req.returnAt ?? null,
       numPasajeros: req.passengers,
@@ -53,8 +82,9 @@ export class AirlineHttpAdapter implements AirlinePort {
       flights: (data?.vuelos ?? []).map((v: any) => ({
         flightId: v?.vueloId ?? v?.Flight_id ?? v?.id,
         airline: v?.aerolinea,
-        originCityId: v?.origen,
-        destinationCityId: v?.destino,
+        // Convertir códigos IATA a ISO 3166-2 para consistencia en Turismo
+        originCityId: toISO3166(v?.origen),
+        destinationCityId: toISO3166(v?.destino),
         departsAt: v?.fechaSalida ?? v?.fecha_salida,
         arrivesAt: v?.fechaLlegada ?? v?.fecha_llegada,
         duration: v?.duracion,
@@ -72,10 +102,11 @@ export class AirlineHttpAdapter implements AirlinePort {
    * POST /v1/vuelos/reservar
    */
   async reserve(req: AirlineReserveRequestDto): Promise<AirlineReserveResponseDto> {
+    const passengers = req.passengers ?? [];
     const { data } = await this.http.post('/v1/vuelos/reservar', {
       vueloId: req.flightId,
-      numPasajeros: req.passengers.length,
-      contactoReserva: req.passengers[0]?.name || 'Contacto',
+      numPasajeros: passengers.length || 1,
+      contactoReserva: passengers[0]?.name || req.clientId || 'Contacto',
       documentoContacto: req.clientId,
     });
     return {
@@ -108,15 +139,34 @@ export class AirlineHttpAdapter implements AirlinePort {
   /**
    * Cancelación de reserva
    * DELETE /v1/vuelos/reservas/{reservaVueloId}
+   * 
+   * NOTA: La aerolínea devuelve texto plano, no JSON
+   * - 200: "Pre-reserva cancelada exitosamente"
+   * - 409: "No se puede cancelar: La reserva ya está cancelada o expirada"
    */
   async cancel(req: AirlineCancelRequestDto): Promise<AirlineCancelResponseDto> {
-    const { data } = await this.http.delete(
-      `/v1/vuelos/reservas/${req.confirmedId}`
-    );
-    return {
-      state: String(data?.estado ?? data?.resultado).toUpperCase() === 'SUCCESS' ? 'SUCCESS' : 'ERROR',
-      message: data?.mensaje ?? undefined,
-      cancelledAt: data?.fechaCancelacion ?? data?.fecha_cancelacion ?? new Date().toISOString(),
-    };
+    try {
+      const response = await this.http.delete(
+        `/v1/vuelos/reservas/${req.confirmedId}`
+      );
+      // La aerolínea devuelve texto plano en caso de éxito
+      const message = typeof response.data === 'string' 
+        ? response.data 
+        : response.data?.mensaje ?? 'Cancelación procesada';
+      
+      return {
+        state: 'SUCCESS',
+        message,
+        cancelledAt: new Date().toISOString(),
+      };
+    } catch (error: any) {
+      // Error 409 u otro - la reserva ya estaba cancelada o expirada
+      const errorMessage = error.response?.data ?? error.message ?? 'Error en cancelación';
+      return {
+        state: 'ERROR',
+        message: typeof errorMessage === 'string' ? errorMessage : JSON.stringify(errorMessage),
+        cancelledAt: new Date().toISOString(),
+      };
+    }
   }
 }
