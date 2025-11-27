@@ -67,6 +67,14 @@ export class CheckoutService {
   }
 
   async confirm(dto: CheckoutConfirmRequestDto, idemKey?: string): Promise<CheckoutConfirmResponseDto> {
+    // 0) Buscar cliente por clientId (CC-XXX) para obtener su UUID
+    const client = await this.prisma.client.findFirst({
+      where: { clientId: dto.clientId, isDeleted: false },
+    });
+    if (!client) {
+      throw new NotFoundException(`Cliente ${dto.clientId} no encontrado`);
+    }
+
     // 1) Cargar carrito
     const cart = await this.prisma.cart.findUnique({ where: { id: dto.cartId }, include: { items: true } });
     if (!cart || cart.items.length === 0) throw new BadRequestException('Carrito vacío o no existe');
@@ -102,11 +110,11 @@ export class CheckoutService {
       }
     }
 
-    // 3) Crear Reservation + Order
+    // 3) Crear Reservation + Order (usando UUID del cliente, no el clientId)
     const reservation = await this.prisma.reservation.create({
       data: {
         reservationId: `RSV-${Date.now()}`,
-        clientId: dto.clientId,
+        clientId: client.id,  // UUID del cliente
         currency: dto.currency.toUpperCase(),
         totalAmount: total,
         state: 'PENDIENTE',
@@ -116,7 +124,7 @@ export class CheckoutService {
     const order = await this.prisma.order.create({
       data: {
         orderNumber: `ORD-${Date.now()}`,
-        clientId: dto.clientId,
+        clientId: client.id,  // UUID del cliente
         currency: dto.currency.toUpperCase(),
         totalAmount: total,
         reservationId: reservation.id,
