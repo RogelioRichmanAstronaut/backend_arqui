@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards, Req } from '@nestjs/common';
 import { ClientsService } from './clients.service';
 import { CreateClientDto } from './dtos/create-client.dto';
 import { UpdateClientDto } from './dtos/update-client.dto';
@@ -13,6 +13,20 @@ export class ClientsController {
   create(@Body() dto: CreateClientDto) {
     console.debug('Create client attempt with DTO:', dto);
     return this.service.create(dto);
+  }
+
+  /**
+   * GET /clients/me - Obtener cliente del usuario autenticado
+   * Busca por email del JWT
+   */
+  @Get('me')
+  async getMe(@Req() req: any) {
+    const email = req.user?.email;
+    console.debug('Get client /me for email:', email);
+    if (!email) {
+      return null;
+    }
+    return this.service.findByEmail(email);
   }
 
   @Get(':id')

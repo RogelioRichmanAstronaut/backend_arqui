@@ -1,0 +1,64 @@
+===========================================
+PRUEBA COMPLETA DE 22 CASOS DE USO
+===========================================
+
+=== CASO 0: HEALTH ===
+0.1 Health:
+{"status":"ok","ts":"2025-11-27T06:55:47.481Z"}
+0.2 Ready:
+{"status":"ready","ts":"2025-11-27T06:55:47.495Z"}
+
+=== CASO 1: AUTENTICACIÓN ===
+1.1 Login:
+{"access_token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6ImFkbWluQHR1cmlzbW8uY29tIiwic3ViIjoiMTQ5NjZiYmItYmVhNC00YWM1LThhZjgtNmIxNGViNGQwMGQwIiwicm9sZSI6IkFETUlOIiwiaWF0IjoxNzY0MjI2NTQ3LCJleHAiOjE3NjQyNTUzNDd9.vjRa8bT8kkZKuAZW7xVQ1kq8UaY25km1Wgcci5lGF2Y","user":{"id":"14966bbb-bea4-4ac5-8af8-6b14eb4d00d0","email":"admin@turismo.com","name":"Admin Turismo","role":"ADMIN"}}
+
+=== CASO 2: CLIENTES ===
+2.1 Crear Cliente (CC-1764226547):
+{"id":"67b7baf5-7ef2-4a73-bf2b-759dfacf72f2","clientId":"CC-1764226547","name":"Test Cliente","email":"test1764226547@test.com","phone":"3001234567","isDeleted":false,"createdAt":"2025-11-27T06:55:47.844Z","updatedAt":"2025-11-27T06:55:47.844Z"}
+2.2 Consultar Cliente:
+{"id":"67b7baf5-7ef2-4a73-bf2b-759dfacf72f2","clientId":"CC-1764226547","name":"Test Cliente","email":"test1764226547@test.com","phone":"3001234567","isDeleted":false,"createdAt":"2025-11-27T06:55:47.844Z","updatedAt":"2025-11-27T06:55:47.844Z"}
+
+=== CASO 3: CATÁLOGO ===
+3.1 Ciudades (primeras 3):
+[{"id":"CO-BOG","name":"Bogotá","country":"Colombia","iataCode":"BOG"},{"id":"CO-MDE","name":"Medellín","country":"Colombia","iataCode":"MDE"},{"id":"CO-CTG","name":"Cartagena","country":"Colombia","iataCode":"CTG"},{"id":"CO-CLO","name":"Cali","country":"Colombia","iataCode":"CLO"},{"id":"CO-BAQ"...
+
+=== CASO 4: VUELOS ===
+4.1 Buscar Vuelos BOG→MDE:
+{"queryId":"32ef5937-f268-4b5f-8129-72c4b1ecd120","flights":[{"flightId":"f47ac10b-58cc-4372-a567-0e02b2c3d479","airline":"Avianca","originCityId":"CO-BOG","destinationCityId":"CO-MDE","departsAt":"2025-12-01T08:00:00","arrivesAt":"2025-12-01T09:30:00","duration":"1h30m","fare":"ECONOMICA","rules":[],"price":250000,"currency":"COP"},{"flightId":"c77ce5aa-b64a-4749-974a-8ba4a3336164","airline":"Avi
+FLIGHT_ID: f47ac10b-58cc-4372-a567-0e02b2c3d479
+4.2 Pre-reservar Vuelo:
+{"flightReservationId":"RSV1764226548210146","priceTotal":250000,"initialState":"PENDIENTE","expiresAt":"2025-11-27T02:25:48.210283578"}
+4.3 Confirmar Vuelo:
+{"confirmedId":"RSV1764226548210146","finalState":"CONFIRMADA","ticketCode":"PNR1764226548282481"}
+
+=== CASO 5: HOTELES ===
+5.1 Buscar Hoteles Medellín:
+{"queryId":"80c1198c-170d-4f0c-8ed9-5f76076b4183","hotelId":"2725c068-4383-4f50-8494-fdc5fdfab7ac","name":"Ponti-Marriott Medellín","cityId":"Medellín","stars":5,"amenities":[],"photos":["https://example.com/images/hotels/medellin-1.jpg"],"roomTypes":[{"roomId":"caa5f8a2-eb5c-47ef-a423-4777fe0a24c3","roomType":"Habitación Doble Estándar","roomCode":"doble","available":true,"priceTotal":400000,
+HOTEL_ID: 2725c068-4383-4f50-8494-fdc5fdfab7ac
+5.2 Pre-reservar Hotel:
+{"hotelReservationId":"540afca5-06e1-4420-9975-423a7d545384","priceTotal":2000000,"currency":"COP","expiresAt":"2025-11-28T06:55:55.821Z","initialState":"PENDIENTE"}
+5.3 Confirmar Hotel:
+{"confirmedId":"540afca5-06e1-4420-9975-423a7d545384","finalState":"CONFIRMADA","voucherCode":"540afca5-06e1-4420-9975-423a7d545384"}
+
+=== CASO 6: CARRITO ===
+6.1 Limpiar Carrito:
+{"id":"3b53a01f-e7fa-46ed-8524-9b0c2d05bbdb","clientId":"CC-1020304050","currency":"COP","total":0,"items":[]}
+6.2 Agregar Vuelo al Carrito:
+{"id":"3b53a01f-e7fa-46ed-8524-9b0c2d05bbdb","clientId":"CC-1020304050","currency":"COP","total":250000,"items":[{"id":"dc3ced23-8439-4937-8823-a7f7c13261ba","kind":"AIR","refId":"f47ac10b-58cc-4372-a567-0e02b2c3d479","quantity":1,"price":250000,"currency":"COP","metadata":{"flightId":"f47ac10b-58cc-4372-a567-0e02b2c3d479","passengers":[{"doc":"CC-1020304050","name":"María Pérez"}],"departureAt":"2025-12-01T08:00:00","originCityId":"CO-BOG","destinationCityId":"CO-MDE"}}]}
+6.3 Ver Carrito:
+{"id":"3b53a01f-e7fa-46ed-8524-9b0c2d05bbdb","clientId":"CC-1020304050","currency":"COP","total":250000,"items":[{"id":"dc3ced23-8439-4937-8823-a7f7c13261ba","kind":"AIR","refId":"f47ac10b-58cc-4372-a567-0e02b2c3d479","quantity":1,"price":250000,"currency":"COP","metadata":{"flightId":"f47ac10b-58cc-4372-a567-0e02b2c3d479","passengers":[{"doc":"CC-1020304050","name":"María Pérez"}],"departureAt":"2025-12-01T08:00:00","originCityId":"CO-BOG","destinationCityId":"CO-MDE"}}]}
+CART_ID: 3b53a01f-e7fa-46ed-8524-9b0c2d05bbdb
+
+=== CASO 7: CHECKOUT ===
+7.1 Quote:
+{"currency":"COP","total":262500,"items":[{"kind":"AIR","refId":"f47ac10b-58cc-4372-a567-0e02b2c3d479","price":262500,"currency":"COP","quantity":1,"metadata":{"flightId":"f47ac10b-58cc-4372-a567-0e02b2c3d479","passengers":[{"doc":"CC-1020304050","name":"María Pérez"}],"departureAt":"2025-12-01T08:00:00","originCityId":"CO-BOG","destinationCityId":"CO-MDE","pricing":{"basePrice":250000,"margin":12500,"finalPrice":262500}}}]}
+7.2 Confirm (con banco):
+{"reservationId":"a6eeecbe-3a05-4167-bbc3-c188641cbe64","orderId":"c6589282-7d47-4110-8acc-dd659c8ad790","totalAmount":250000,"currency":"COP","paymentAttemptId":"BDB-20251127-QRVSPT","bankPaymentUrl":"http://localhost:3000/pago/4?ref=BDB-20251127-QRVSPT","initialState":"PENDIENTE","expiresAt":"2025-11-27T07:10:56.552Z","hotelReservations":[],"flightReservations":[{"flightReservationId":"RSV1764226556530328","expiresAt":"2025-11-27T02:25:56.530253134"}]}
+
+=== CASO 8: RESERVACIONES ===
+8.1 Listar Reservaciones:
+[]
+
+===========================================
+FIN DE PRUEBAS
+===========================================

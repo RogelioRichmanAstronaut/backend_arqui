@@ -53,6 +53,14 @@ export class PaymentsController {
     console.debug('Payment status check attempt with query:', q);
     return this.service.status(q);
   }
+  
+  // Endpoint público para sincronizar estado después del pago
+  // (sin autenticación porque el usuario viene redirigido del banco)
+  @Get('sync')
+  async syncStatus(@Query() q: BankStatusRequestDto): Promise<BankStatusResponseDto> {
+    console.debug('Payment sync attempt with query:', q);
+    return this.service.status(q);
+  }
 
   @Post('refund')
   @UseGuards(JwtAuthGuard)

@@ -1,10 +1,11 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable, NotFoundException, forwardRef } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { BankHttpAdapter } from './adapters/bank-http.adapter';
-import { PaymentState, ReservationState } from '@prisma/client';
+import { PaymentState, ReservationState, BookingState } from '@prisma/client';
 import { BankSignatureService } from './services/bank-signature.service';
 import { bankConfig } from './bank.config';
 import { OutboxPublisher } from './outbox/outbox.publisher';
+import { BookingsService } from '../bookings/bookings.service';
 
 import {
   BankInitiatePaymentRequestDto,
@@ -36,6 +37,8 @@ export class PaymentsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly sig: BankSignatureService,
+    @Inject(forwardRef(() => BookingsService))
+    private readonly bookings: BookingsService,
   ) {
     this.outbox = new OutboxPublisher(prisma);
   }
@@ -228,6 +231,15 @@ export class PaymentsService {
       transactionId: q.transactionId,
       paymentAttemptExtId: q.paymentAttemptId,
     });
+    
+    // 3) Si el banco dice APROBADA, sincronizar reservación automáticamente
+    //    (esto cubre el caso de que el webhook no llegó)
+    //    Usar transactionId como paymentAttemptExtId si no se pasó paymentAttemptId
+    const extId = q.paymentAttemptId || q.transactionId;
+    if (remote.state === 'APROBADA' && extId) {
+      await this.syncReservationState(extId, remote);
+    }
+    
     return {
       state: remote.state as any,
       stateDetail: remote.stateDetail ?? '',
@@ -237,6 +249,128 @@ export class PaymentsService {
       receiptRef: remote.receiptRef ?? '',
       lastUpdateAt: remote.lastUpdateAt,
     };
+  }
+  
+  // SYNC - Sincronizar estado de reservación cuando el webhook no llegó
+  private async syncReservationState(
+    paymentAttemptExtId: string,
+    bankResponse: { state: string; authCode?: string; receiptRef?: string; totalAmount: number; currency: string; lastUpdateAt: string },
+  ) {
+    try {
+      const attempt = await this.prisma.paymentAttempt.findFirst({
+        where: { paymentAttemptExtId },
+        include: { reservation: true },
+      });
+      
+      if (!attempt) {
+        console.warn(`[Sync] PaymentAttempt ${paymentAttemptExtId} no encontrado`);
+        return;
+      }
+      
+      // Solo sincronizar si la reservación sigue PENDIENTE
+      if (attempt.reservation.state !== 'PENDIENTE') {
+        console.log(`[Sync] Reservación ${attempt.reservationId} ya está en ${attempt.reservation.state}`);
+        // Aun así, confirmar bookings si no lo están
+        await this.confirmBookingsForReservation(attempt.reservationId, paymentAttemptExtId);
+        return;
+      }
+      
+      console.log(`[Sync] Actualizando reservación ${attempt.reservationId} de PENDIENTE a APROBADA`);
+      
+      // Crear transacción local si no existe
+      const existingTx = await this.prisma.transaction.findFirst({
+        where: { paymentAttemptId: attempt.id },
+      });
+      
+      if (!existingTx) {
+        await this.prisma.transaction.create({
+          data: {
+            transactionId: paymentAttemptExtId,
+            paymentAttemptId: attempt.id,
+            state: 'APROBADA',
+            authCode: bankResponse.authCode ?? null,
+            receiptRef: bankResponse.receiptRef ?? null,
+            totalAmount: bankResponse.totalAmount,
+            currency: bankResponse.currency,
+            transactionAt: new Date(bankResponse.lastUpdateAt),
+          },
+        });
+      }
+      
+      // Actualizar estados
+      await this.prisma.$transaction([
+        this.prisma.paymentAttempt.update({
+          where: { id: attempt.id },
+          data: { state: 'APROBADA' },
+        }),
+        this.prisma.reservation.update({
+          where: { id: attempt.reservationId },
+          data: { state: 'APROBADA' },
+        }),
+      ]);
+      
+      console.log(`[Sync] ✅ Reservación ${attempt.reservationId} actualizada a APROBADA`);
+      
+      // Confirmar bookings de hotel y vuelo con los proveedores
+      await this.confirmBookingsForReservation(attempt.reservationId, paymentAttemptExtId);
+    } catch (err) {
+      console.error('[Sync] Error sincronizando estado:', err);
+    }
+  }
+  
+  // Confirmar bookings de hotel y vuelo con los proveedores externos
+  private async confirmBookingsForReservation(reservationId: string, transactionId: string) {
+    try {
+      // Buscar hotel bookings pendientes
+      const hotelBookings = await this.prisma.hotelBooking.findMany({
+        where: { reservationId, state: BookingState.PENDIENTE },
+      });
+      
+      for (const hb of hotelBookings) {
+        try {
+          console.log(`[Sync] Confirmando hotel booking ${hb.bookingId}...`);
+          await this.bookings.hotelsConfirm({
+            hotelReservationId: hb.extBookingId || hb.bookingId,
+            transactionId,
+          });
+          
+          // Actualizar estado en nuestra BD
+          await this.prisma.hotelBooking.update({
+            where: { id: hb.id },
+            data: { state: BookingState.APROBADA },
+          });
+          console.log(`[Sync] ✅ Hotel booking ${hb.bookingId} confirmado`);
+        } catch (err) {
+          console.error(`[Sync] Error confirmando hotel ${hb.bookingId}:`, err);
+        }
+      }
+      
+      // Buscar flight bookings pendientes
+      const flightBookings = await this.prisma.flightBooking.findMany({
+        where: { reservationId, state: BookingState.PENDIENTE },
+      });
+      
+      for (const fb of flightBookings) {
+        try {
+          console.log(`[Sync] Confirmando flight booking ${fb.pnr}...`);
+          await this.bookings.airConfirm({
+            flightReservationId: fb.extBookingId || fb.pnr,
+            transactionId,
+          });
+          
+          // Actualizar estado en nuestra BD
+          await this.prisma.flightBooking.update({
+            where: { id: fb.id },
+            data: { state: BookingState.APROBADA },
+          });
+          console.log(`[Sync] ✅ Flight booking ${fb.pnr} confirmado`);
+        } catch (err) {
+          console.error(`[Sync] Error confirmando flight ${fb.pnr}:`, err);
+        }
+      }
+    } catch (err) {
+      console.error('[Sync] Error confirmando bookings:', err);
+    }
   }
 
   // REFUND

@@ -53,13 +53,15 @@ export class CartService {
       }
     }
 
+    // NOTA: El precio ya incluye comisión (aplicada en búsqueda)
+    // Search aplica: 10% hoteles, 5% vuelos
     await this.prisma.cartItem.create({
       data: {
         cartId: cart.id,
         kind: dto.kind as any,
         refId: dto.refId,
         quantity: dto.quantity,
-        price: dto.price,
+        price: dto.price, // Precio YA incluye comisión desde búsqueda
         currency: dto.currency.toUpperCase(),
         metadata: dto.metadata ?? {},
       },
@@ -70,7 +72,7 @@ export class CartService {
       include: { items: true },
     });
     return this.toView(fresh);
-    }
+  }
 
   async getCart(clientId: string): Promise<CartViewResponseDto> {
     const cart = await this.prisma.cart.findFirst({

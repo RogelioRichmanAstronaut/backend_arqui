@@ -21,10 +21,10 @@
 ### - Turismo → Aerolínea: CO-BOG → BOG (IATA)
 ### - Turismo → Hotel: CO-BOG → Bogotá (nombre)
 ###
-### USUARIOS DE PRUEBA BANCO:
-### - Doc: 1234567890, Pass: cliente123, Balance: $5,000,000
-### - Doc: 9876543210, Pass: cliente123, Balance: $3,000,000
-### - Doc: 0000000000, Pass: cliente123, Balance: $10,000,000 (Guest)
+### USUARIOS DE PRUEBA BANCO (Pass: cliente123):
+### - Doc: 1234567890 (Juan Pérez) - Balance: $5,000,000
+### - Doc: 9876543210 (María García) - Balance: $3,000,000
+### - Doc: 0000000000 (Guest) - Balance: $10,000,000
 ###
 ### ============================================
 
@@ -1010,60 +1010,67 @@ Authorization: Bearer {{token}}
 ### ============================================
 ### CASO 11: BANCO DIRECTO (para debug)
 ### Banco: localhost:3000
-### Usuarios: 1234567890, 9876543210, 0000000000
-### Contraseña: cliente123
+### ============================================
+### USUARIOS DE PRUEBA (contraseña: cliente123):
+### - 1234567890 (Juan Pérez) - Balance: $5,000,000
+### - 9876543210 (María García) - Balance: $3,000,000  
+### - 0000000000 (Usuario Invitado) - Balance: $10,000,000
 ### ============================================
 
 ### 11.1 Crear pago directamente en banco
+# @name crearPagoBanco
 #
-# ✅ RESPUESTA ÉXITO (201):
+# ✅ RESPUESTA ÉXITO (200):
 # {
-#   "id_pago": 123,
 #   "referencia_transaccion": "BDB-20251127-XXXXX",
-#   "url_pago": "http://localhost:3000/pago?ref=BDB-...",
-#   "estado": "PENDIENTE"
+#   "url_banco": "http://localhost:3000/pago/13?ref=BDB-20251127-XXXXX"
 # }
 #
-# ❌ ERROR: Usuario no encontrado (404):
-# {"message":"Usuario no encontrado en el sistema bancario"}
-POST {{bankUrl}}/api/pagos/crear
+# ❌ ERROR: Falta destinatario (400):
+# {"message":["destinatario must be a string"],"error":"Bad Request","statusCode":400}
+POST {{bankUrl}}/crear-pago
 Content-Type: application/json
 
 {
-  "monto": 500000,
+  "monto_total": 500000,
   "descripcion_pago": "Reserva paquete Caribe #TEST123",
   "cedula_cliente": "1234567890",
   "nombre_cliente": "Juan Pérez",
   "url_respuesta": "http://localhost:3333/bank/response",
-  "url_notificacion": "http://localhost:3001/v1/payments/webhook"
+  "url_notificacion": "http://localhost:3001/v1/payments/webhook",
+  "destinatario": "9001234561"
 }
 
 ###
 
 ### 11.2 Procesar pago en banco (simular autorización)
+# NOTA: Reemplaza id_pago con el ID del pago creado en 11.1
 #
 # ✅ RESPUESTA ÉXITO (200):
 # {
 #   "success": true,
 #   "message": "Pago procesado exitosamente",
-#   "pagoId": 123,
+#   "pagoId": 13,
 #   "nuevoBalance": 4500000,
 #   "referencia_transaccion": "BDB-20251127-XXXXX",
 #   "estado_transaccion": "APROBADA",
-#   "codigo_autorizacion": "AUTH123456",
+#   "codigo_autorizacion": "AUTH-1764230915034",
 #   "url_respuesta": "http://localhost:3333/bank/response"
 # }
 #
-# ❌ ERROR: Fondos insuficientes (400):
-# {"message":"Fondos insuficientes","statusCode":400}
+# ❌ ERROR: Credenciales inválidas (400):
+# {"message":"Credenciales inválidas","error":"Bad Request","statusCode":400}
 #
-# ❌ ERROR: Contraseña incorrecta (401):
-# {"message":"Contraseña incorrecta","statusCode":401}
+# ❌ ERROR: Pago ya procesado (400):
+# {"message":"Este pago ya ha sido procesado","error":"Bad Request","statusCode":400}
+#
+# ❌ ERROR: Saldo insuficiente (400):
+# {"message":"Saldo insuficiente","error":"Bad Request","statusCode":400}
 POST {{bankUrl}}/api/pagos/procesar
 Content-Type: application/json
 
 {
-  "id_pago": 123,
+  "id_pago": 13,
   "cedula_cliente": "1234567890",
   "contrasena": "cliente123"
 }
@@ -1471,9 +1478,9 @@ Authorization: Bearer {{token}}
 ### - Medellín: Ponti-Marriott 5⭐ ($400k/noche)
 ### - Bogotá: Gran Hotel Andino 4⭐ ($400k/noche)
 ###
-### USUARIOS BANCO:
-### - 1234567890 / cliente123 / $5,000,000
-### - 9876543210 / cliente123 / $3,000,000
-### - 0000000000 / cliente123 / $10,000,000 (Guest)
+### USUARIOS BANCO (Pass: cliente123):
+### - 1234567890 (Juan) - $5,000,000
+### - 9876543210 (María) - $3,000,000
+### - 0000000000 (Guest) - $10,000,000
 ###
 ### ============================================

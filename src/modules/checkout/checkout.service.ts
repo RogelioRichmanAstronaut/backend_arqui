@@ -35,34 +35,29 @@ export class CheckoutService {
       return { currency: 'COP', total: 0, items: [] };
     }
 
-    // Aplicar márgenes a cada item
-    const itemsWithMargin = cart.items.map((it) => {
-      const basePrice = Number(it.price);
-      const marginCalc = this.margins.applyMargin(basePrice, it.kind as CartItemKind);
+    // El carrito YA tiene el precio final con comisión aplicada (se aplica en addItem)
+    // Solo mapeamos los items sin modificar precios
+    const items = cart.items.map((it) => {
+      const meta = typeof it.metadata === 'object' && it.metadata !== null 
+        ? it.metadata as Record<string, unknown> 
+        : {};
       
       return {
         kind: it.kind,
         refId: it.refId,
-        price: marginCalc.final, // Precio final con margen
+        price: Number(it.price), // Precio YA incluye comisión
         currency: it.currency,
         quantity: it.quantity,
-        metadata: {
-          ...(typeof it.metadata === 'object' && it.metadata !== null ? it.metadata as Record<string, unknown> : {}),
-          pricing: {
-            basePrice: marginCalc.base,
-            margin: marginCalc.margin,
-            finalPrice: marginCalc.final,
-          },
-        },
+        metadata: meta,
       };
     });
 
-    const total = itemsWithMargin.reduce((s, it) => s + it.price * it.quantity, 0);
+    const total = items.reduce((s, it) => s + it.price * it.quantity, 0);
 
     return {
       currency: cart.currency,
       total: Number(total.toFixed(2)),
-      items: itemsWithMargin,
+      items,
     };
   }
 
@@ -147,44 +142,91 @@ export class CheckoutService {
     const flightReservations: Array<{ flightReservationId: string; expiresAt: string }> = [];
 
     try {
+      console.log('[Checkout] Items en orden:', order.items.map(i => ({ kind: i.kind, refId: i.refId })));
+      
       // HOTEL
-    for (const it of order.items.filter((i) => i.kind === CartItemKind.HOTEL)) {
-      const m = it.metadata as {
-        hotelId: string;
-        roomId: string;
-        checkIn: string;
-        checkOut: string;
-      };
-      const req: HotelReserveRequestDto = {
-        hotelId: m.hotelId,
-        roomId: m.roomId,
-        clientId: dto.clientId,
-        checkIn: m.checkIn,
-        checkOut: m.checkOut,
-        reservationId: reservation.id,
-      };
-      const res: { hotelReservationId: string; expiresAt: string } = await this.bookings.hotelsReserve(req);
-      hotelReservations.push({ hotelReservationId: res.hotelReservationId, expiresAt: res.expiresAt });
-    }
+      for (const it of order.items.filter((i) => i.kind === CartItemKind.HOTEL)) {
+        const m = it.metadata as {
+          hotelId: string;
+          roomId: string;
+          checkIn: string;
+          checkOut: string;
+          hotelName?: string;
+        };
+        const req: HotelReserveRequestDto = {
+          hotelId: m.hotelId,
+          roomId: m.roomId,
+          clientId: dto.clientId,
+          checkIn: m.checkIn,
+          checkOut: m.checkOut,
+          reservationId: reservation.id,
+        };
+        const res = await this.bookings.hotelsReserve(req);
+        console.log('[Checkout] Hotel reservado:', res.hotelReservationId);
+        hotelReservations.push({ hotelReservationId: res.hotelReservationId, expiresAt: res.expiresAt });
+        
+        // Guardar en HotelBooking para trazabilidad
+        const hotelSupplier = await this.getOrCreateHotelSupplier();
+        console.log('[Checkout] Guardando HotelBooking...');
+        await this.prisma.hotelBooking.create({
+          data: {
+            bookingId: res.hotelReservationId,
+            reservationId: reservation.id,
+            clientId: dto.clientId,
+            supplierId: hotelSupplier.id,
+            propertyCode: m.hotelId,
+            roomTypeCode: m.roomId,
+            ratePlanCode: 'STANDARD',
+            checkIn: new Date(m.checkIn),
+            checkOut: new Date(m.checkOut),
+            currency: dto.currency.toUpperCase(),
+            totalAmount: Number(it.price),
+            state: 'PENDIENTE',
+            extBookingId: res.hotelReservationId,
+          },
+        });
+      }
 
       // AIR
-    for (const it of order.items.filter((i) => i.kind === CartItemKind.AIR)) {
-      const m = it.metadata as {
-        flightId: string;
-        passengers: Array<{ name: string; age: number; seat: string }>;
-      };
-      const req: AirlineReserveRequestDto = {
-        flightId: m.flightId,
-        reservationId: reservation.id,
-        clientId: dto.clientId,
-        passengers: m.passengers.map((p: { name: string; age: number; seat: string }) => ({
-          name: p.name,
-          doc: '', // Add logic to populate 'doc' as needed
-        })),
-      };
-      const res: { flightReservationId: string; expiresAt: string } = await this.bookings.airReserve(req);
-      flightReservations.push({ flightReservationId: res.flightReservationId, expiresAt: res.expiresAt });
-    }
+      for (const it of order.items.filter((i) => i.kind === CartItemKind.AIR)) {
+        const m = it.metadata as {
+          flightId: string;
+          passengers: Array<{ name: string; doc?: string }>;
+          originCityId?: string;
+          destinationCityId?: string;
+          departureAt?: string;
+        };
+        const req: AirlineReserveRequestDto = {
+          flightId: m.flightId,
+          reservationId: reservation.id,
+          clientId: dto.clientId,
+          passengers: (m.passengers || []).map((p) => ({
+            name: p.name,
+            doc: p.doc || dto.clientId,
+          })),
+        };
+        const res = await this.bookings.airReserve(req);
+        flightReservations.push({ flightReservationId: res.flightReservationId, expiresAt: res.expiresAt });
+        
+        // Guardar en FlightBooking para trazabilidad
+        const airlineSupplier = await this.getOrCreateAirlineSupplier();
+        await this.prisma.flightBooking.create({
+          data: {
+            pnr: res.flightReservationId,
+            reservationId: reservation.id,
+            clientId: dto.clientId,
+            supplierId: airlineSupplier.id,
+            origin: m.originCityId?.replace('CO-', '') || 'BOG',
+            destination: m.destinationCityId?.replace('CO-', '') || 'MDE',
+            departureAt: m.departureAt ? new Date(m.departureAt) : new Date(),
+            currency: dto.currency.toUpperCase(),
+            totalAmount: Number(it.price),
+            state: 'PENDIENTE',
+            extBookingId: res.flightReservationId,
+            segments: m.passengers,
+          },
+        });
+      }
     } catch (e) {
       // Falla durante reservas → marcar fallido
       await this.prisma.order.update({ where: { id: order.id }, data: { state: 'FAILED' } });
@@ -222,5 +264,33 @@ export class CheckoutService {
       hotelReservations,
       flightReservations,
     };
+  }
+
+  // Helper: obtener o crear supplier de hotel
+  private async getOrCreateHotelSupplier() {
+    const existing = await this.prisma.hotelSupplier.findFirst({ where: { code: 'HOTEL-DEFAULT' } });
+    if (existing) return existing;
+    
+    return this.prisma.hotelSupplier.create({
+      data: {
+        code: 'HOTEL-DEFAULT',
+        name: 'Hotel Service Provider',
+        baseUrl: process.env.HOTEL_BACKEND_URL || 'http://localhost:3002',
+      },
+    });
+  }
+
+  // Helper: obtener o crear supplier de aerolínea
+  private async getOrCreateAirlineSupplier() {
+    const existing = await this.prisma.airlineSupplier.findFirst({ where: { code: 'AIR-DEFAULT' } });
+    if (existing) return existing;
+    
+    return this.prisma.airlineSupplier.create({
+      data: {
+        code: 'AIR-DEFAULT',
+        name: 'Airline Service Provider',
+        baseUrl: process.env.AIR_BACKEND_URL || 'http://localhost:3003',
+      },
+    });
   }
 }
